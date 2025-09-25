@@ -36,6 +36,20 @@ func (cc *ConverterCache) build(res *SiriResponse, format string) []byte {
 	return rb.BuildJSON(res)
 }
 
+// GetSituationExchangeResponse returns a minimal SiriResponse with an empty SituationExchangeDelivery.
+// Placeholder until SX builder is implemented.
+func (cc *ConverterCache) GetSituationExchangeResponse(format string) ([]byte, error) {
+	ts := cc.converter.GTFSRT.GetTimestampForFeedMessage()
+	sx := cc.converter.BuildSituationExchange()
+	res := &SiriResponse{Siri: SiriServiceDelivery{ServiceDelivery: VehicleAndSituation{
+		ResponseTimestamp:         iso8601FromUnixSeconds(ts),
+		VehicleMonitoringDelivery: []VehicleMonitoring{},
+		SituationExchangeDelivery: []SituationExchange{sx},
+		StopMonitoringDelivery:    []StopMonitoring{},
+	}}}
+	return cc.build(res, format), nil
+}
+
 func (cc *ConverterCache) selectTripsByVM(params map[string]string) []string {
 	// Filters: vehicleref, lineref, directionref
 	vehRef := strings.ToLower(params["vehicleref"])
@@ -131,10 +145,11 @@ func (cc *ConverterCache) buildVMResponse(trips []string, includeCalls bool) *Si
 		vat := VehicleActivityEntry{RecordedAtTime: iso8601FromUnixSeconds(cc.converter.GTFSRT.GetTimestampForTrip(t)), MonitoredVehicleJourney: mvj}
 		vm.VehicleActivity = append(vm.VehicleActivity, vat)
 	}
+	sx := cc.converter.BuildSituationExchange()
 	return &SiriResponse{Siri: SiriServiceDelivery{ServiceDelivery: VehicleAndSituation{
 		ResponseTimestamp:         iso8601FromUnixSeconds(ts),
 		VehicleMonitoringDelivery: []VehicleMonitoring{vm},
-		SituationExchangeDelivery: []any{},
+		SituationExchangeDelivery: []SituationExchange{sx},
 	}}}
 }
 
@@ -155,10 +170,11 @@ func (cc *ConverterCache) buildVMResponseWithCalls(trips []string, includeCalls 
 		vat := VehicleActivityEntry{RecordedAtTime: iso8601FromUnixSeconds(cc.converter.GTFSRT.GetTimestampForTrip(t)), MonitoredVehicleJourney: mvj}
 		vm.VehicleActivity = append(vm.VehicleActivity, vat)
 	}
+	sx := cc.converter.BuildSituationExchange()
 	return &SiriResponse{Siri: SiriServiceDelivery{ServiceDelivery: VehicleAndSituation{
 		ResponseTimestamp:         iso8601FromUnixSeconds(ts),
 		VehicleMonitoringDelivery: []VehicleMonitoring{vm},
-		SituationExchangeDelivery: []any{},
+		SituationExchangeDelivery: []SituationExchange{sx},
 	}}}
 }
 
@@ -190,10 +206,11 @@ func (cc *ConverterCache) buildSMResponse(stopID string, trips []string, maxOnwa
 		}
 		sm.MonitoredStopVisit = append(sm.MonitoredStopVisit, ms)
 	}
+	sx := cc.converter.BuildSituationExchange()
 	return &SiriResponse{Siri: SiriServiceDelivery{ServiceDelivery: VehicleAndSituation{
 		ResponseTimestamp:         iso8601FromUnixSeconds(ts),
 		VehicleMonitoringDelivery: []VehicleMonitoring{},
-		SituationExchangeDelivery: []any{},
+		SituationExchangeDelivery: []SituationExchange{sx},
 		StopMonitoringDelivery:    []StopMonitoring{sm},
 	}}}
 }
@@ -320,11 +337,108 @@ func (cc *ConverterCache) GetVehicleMonitoringResponse(params map[string]string,
 			maxOnward = v
 		}
 	}
-	key := cc.memoKey("vm", format, detail, strconv.Itoa(maxOnward))
+	key := cc.memoKey("vm", format, detail, strconv.Itoa(maxOnward), strings.ToLower(params["lineref"]), strings.ToLower(params["directionref"]))
 	if buf, ok := cc.responseCache[key]; ok {
 		return buf, nil
 	}
 	trips := cc.selectTripsByVM(params)
+	// Apply MaximumStopVisits/MinimumStopVisitsPerLine like in SM
+	maxSV := -1
+	minPerLine := -1
+	if s := params["maximumstopvisits"]; s != "" {
+		if v, err := strconv.Atoi(s); err == nil {
+			maxSV = v
+		}
+	}
+	if s := params["minimumstopvisitsperline"]; s != "" {
+		if v, err := strconv.Atoi(s); err == nil {
+			minPerLine = v
+		}
+	}
+	if maxSV >= 0 {
+		// Partition trips by route
+		byRoute := map[string][]string{}
+		for _, t := range trips {
+			rid := cc.converter.GTFSRT.GetRouteIDForTrip(t)
+			byRoute[rid] = append(byRoute[rid], t)
+		}
+		// Sort each route's trips by earliest ETA across any stop (approx: first onward stop)
+		for rid := range byRoute {
+			sort.Slice(byRoute[rid], func(i, j int) bool {
+				ti := byRoute[rid][i]
+				tj := byRoute[rid][j]
+				// choose first onward stop ETA as proxy
+				etaI := int64(1 << 62)
+				etaJ := int64(1 << 62)
+				if stops := cc.converter.GTFSRT.GetOnwardStopIDsForTrip(ti); len(stops) > 0 {
+					if e := cc.converter.GTFSRT.GetExpectedArrivalTimeAtStopForTrip(ti, stops[0]); e > 0 {
+						etaI = e
+					} else {
+						etaI = cc.converter.GTFSRT.GetExpectedDepartureTimeAtStopForTrip(ti, stops[0])
+					}
+				}
+				if stops := cc.converter.GTFSRT.GetOnwardStopIDsForTrip(tj); len(stops) > 0 {
+					if e := cc.converter.GTFSRT.GetExpectedArrivalTimeAtStopForTrip(tj, stops[0]); e > 0 {
+						etaJ = e
+					} else {
+						etaJ = cc.converter.GTFSRT.GetExpectedDepartureTimeAtStopForTrip(tj, stops[0])
+					}
+				}
+				return etaI < etaJ
+			})
+		}
+		selected := make([]string, 0, len(trips))
+		if minPerLine > 0 {
+			for _, arr := range byRoute {
+				k := minPerLine
+				if k > len(arr) {
+					k = len(arr)
+				}
+				selected = append(selected, arr[:k]...)
+			}
+		}
+		if len(selected) < maxSV {
+			type cand struct {
+				t   string
+				eta int64
+			}
+			cands := make([]cand, 0, len(trips))
+			for _, arr := range byRoute {
+				for _, t := range arr {
+					skip := false
+					for _, s := range selected {
+						if s == t {
+							skip = true
+							break
+						}
+					}
+					if skip {
+						continue
+					}
+					eta := int64(1 << 62)
+					if stops := cc.converter.GTFSRT.GetOnwardStopIDsForTrip(t); len(stops) > 0 {
+						if e := cc.converter.GTFSRT.GetExpectedArrivalTimeAtStopForTrip(t, stops[0]); e > 0 {
+							eta = e
+						} else {
+							eta = cc.converter.GTFSRT.GetExpectedDepartureTimeAtStopForTrip(t, stops[0])
+						}
+					}
+					cands = append(cands, cand{t: t, eta: eta})
+				}
+			}
+			sort.Slice(cands, func(i, j int) bool { return cands[i].eta < cands[j].eta })
+			for _, c := range cands {
+				if len(selected) >= maxSV {
+					break
+				}
+				selected = append(selected, c.t)
+			}
+		}
+		if len(selected) > maxSV {
+			selected = selected[:maxSV]
+		}
+		trips = selected
+	}
 	res := cc.buildVMResponseWithCalls(trips, includeCalls, maxOnward, "", false)
 	buf := cc.build(res, format)
 	cc.responseCache[key] = buf

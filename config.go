@@ -21,6 +21,7 @@ type GTFSRTConfig struct {
 	FeedURL             string `yaml:"feedURL" validate:"omitempty,url"`
 	TripUpdatesURL      string `yaml:"tripUpdatesURL" validate:"omitempty,url"`
 	VehiclePositionsURL string `yaml:"vehiclePositionsURL" validate:"omitempty,url"`
+	ServiceAlertsURL    string `yaml:"serviceAlertsURL" validate:"omitempty,url"`
 	ReadIntervalMS      int    `yaml:"readIntervalMS" validate:"gte=0"`
 	TimeoutMS           int    `yaml:"timeoutMS" validate:"gte=0"`
 }

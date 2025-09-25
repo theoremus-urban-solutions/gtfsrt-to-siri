@@ -4,21 +4,24 @@ import (
 	"flag"
 	"fmt"
 	lib "mta/gtfsrt-to-siri"
+	"strings"
 )
 
 func main() {
 	mode := flag.String("mode", "oneshot", "oneshot")
 	format := flag.String("format", "json", "json|xml")
-	call := flag.String("call", "vm", "vm|sm")
+	call := flag.String("call", "vm", "vm|sm|sx")
 	feedName := flag.String("feed", "", "feed name from config.feeds[]")
 	tripUpdates := flag.String("tripUpdates", "", "GTFS-RT TripUpdates URL (overrides config)")
 	vehiclePositions := flag.String("vehiclePositions", "", "GTFS-RT VehiclePositions URL (overrides config)")
+	serviceAlerts := flag.String("serviceAlerts", "", "GTFS-RT ServiceAlerts URL (overrides config)")
 	monitoringRef := flag.String("monitoringRef", "", "StopMonitoring MonitoringRef (stop_id)")
 	maxOnward := flag.Int("maxOnward", -1, "MaximumNumberOfCallsOnwards")
 	lineRef := flag.String("lineRef", "", "LineRef filter (route or AGENCY_route)")
 	directionRef := flag.String("directionRef", "", "DirectionRef filter (0|1)")
 	maximumStopVisits := flag.Int("maximumStopVisits", -1, "MaximumStopVisits (SM selection)")
 	minimumStopVisitsPerLine := flag.Int("minimumStopVisitsPerLine", -1, "MinimumStopVisitsPerLine (SM selection)")
+	modules := flag.String("modules", "tu,vp", "Comma-separated GTFS-RT modules to fetch: tu,vp,alerts")
 	flag.Parse()
 
 	lib.InitLogging()
@@ -39,7 +42,38 @@ func main() {
 		if *vehiclePositions != "" {
 			vp = *vehiclePositions
 		}
-		rt := lib.NewGTFSRTWrapper(tu, vp)
+		// Apply modules selection: disable URLs for modules not requested
+		includeTU, includeVP, includeAlerts := false, false, false
+		{
+			mset := map[string]bool{}
+			for _, m := range strings.Split(*modules, ",") {
+				m = strings.TrimSpace(strings.ToLower(m))
+				if m != "" {
+					mset[m] = true
+				}
+			}
+			includeTU = mset["tu"]
+			includeVP = mset["vp"]
+			includeAlerts = mset["alerts"]
+		}
+		if !includeTU {
+			tu = ""
+		}
+		if !includeVP {
+			vp = ""
+		}
+		alerts := rtCfg.ServiceAlertsURL
+		if *serviceAlerts != "" {
+			alerts = *serviceAlerts
+		}
+		if !includeAlerts {
+			alerts = ""
+		}
+		if *call == "sx" && !includeAlerts {
+			panic("alerts module required for sx call; include via -modules=alerts")
+		}
+
+		rt := lib.NewGTFSRTWrapper(tu, vp, alerts)
 		_ = rt.Refresh()
 		conv := lib.NewConverter(gtfs, rt, lib.Config)
 		cache := lib.NewConverterCache(conv)
@@ -70,8 +104,10 @@ func main() {
 				params["minimumstopvisitsperline"] = fmt.Sprintf("%d", *minimumStopVisitsPerLine)
 			}
 			buf, err = cache.GetStopMonitoringResponse(params, *format)
-		} else {
+		} else if *call == "vm" {
 			buf, err = cache.GetVehicleMonitoringResponse(map[string]string{}, *format)
+		} else if *call == "sx" {
+			buf, err = cache.GetSituationExchangeResponse(*format)
 		}
 		if err != nil {
 			panic(err)

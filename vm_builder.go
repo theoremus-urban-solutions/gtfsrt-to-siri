@@ -54,6 +54,9 @@ func (c *Converter) buildMVJ(tripID string) MonitoredVehicleJourney {
 	head := c.GTFS.GetTripHeadsign(tripKey)
 	pub := c.GTFS.GetRouteShortName(routeID)
 	vehRef := c.GTFSRT.GetVehicleRefForTrip(tripID)
+	if agency != "" && vehRef != "" {
+		vehRef = agency + "_" + vehRef
+	}
 	var bearing *float64
 	if b, ok := c.GTFSRT.GetVehicleBearingForTrip(tripID); ok {
 		bearing = &b
@@ -88,7 +91,7 @@ func (c *Converter) buildMVJ(tripID string) MonitoredVehicleJourney {
 	}
 	dvj := c.CfGDatedVehicleJourneyRef(tripKey, agency)
 
-	// OriginAimedDepartureTime: prefer RT departure at origin; else RT arrival; else empty
+	// OriginAimedDepartureTime fallback order: RT dep at origin, else RT arr at origin, else empty (scheduled not available yet)
 	originAimed := ""
 	if origin != "" {
 		if dep := c.GTFSRT.GetExpectedDepartureTimeAtStopForTrip(tripID, origin); dep > 0 {
@@ -102,10 +105,19 @@ func (c *Converter) buildMVJ(tripID string) MonitoredVehicleJourney {
 	onward := c.buildOnwardCalls(tripID, -1, "", false)
 
 	return MonitoredVehicleJourney{
-		LineRef:                  lineRef,
-		DirectionRef:             direction,
-		FramedVehicleJourneyRef:  FramedVehicleJourneyRef{DataFrameRef: dataFrameRef, DatedVehicleJourneyRef: dvj},
-		JourneyPatternRef:        "",
+		LineRef:                 lineRef,
+		DirectionRef:            direction,
+		FramedVehicleJourneyRef: FramedVehicleJourneyRef{DataFrameRef: dataFrameRef, DatedVehicleJourneyRef: dvj},
+		JourneyPatternRef: func() string {
+			sh := c.GTFS.GetShapeIDForTrip(tripKey)
+			if sh == "" {
+				return ""
+			}
+			if agency != "" {
+				return agency + "_" + sh
+			}
+			return sh
+		}(),
 		PublishedLineName:        pub,
 		OperatorRef:              agency,
 		OriginRef:                origin,
@@ -153,7 +165,16 @@ func (c *Converter) buildOnwardCalls(tripID string, maxOnward int, selectedStopI
 	tripKey := TripKeyForConverter(tripID, agency, startDate)
 
 	calls := make([]SiriCall, 0, limit)
-	// Vehicle distance along route unknown without tracker; use origin distance as baseline
+	// compute vehicle distance and next-stop distance for presentable distance tuning
+	vehKMOverall := c.Snap.GetVehicleDistanceAlongRouteInKilometers(tripKey)
+	nextStopDistKM := 0.0
+	if len(stops) > 0 && !isNaN(vehKMOverall) {
+		nextStopDistKM = c.GTFS.GetStopDistanceAlongRouteForTripInKilometers(tripKey, stops[0]) - vehKMOverall
+		if nextStopDistKM < 0 {
+			nextStopDistKM = 0
+		}
+	}
+	// fill calls and distances
 	for i := 0; i < limit && i < len(stops); i++ {
 		sid := stops[i]
 		call := c.buildCall(tripID, sid)
@@ -168,8 +189,16 @@ func (c *Converter) buildOnwardCalls(tripID string, maxOnward int, selectedStopI
 		// Distances along route
 		callDistKM := c.GTFS.GetStopDistanceAlongRouteForTripInKilometers(tripKey, sid)
 		call.Extensions.Distances.StopsFromCall = i
-		call.Extensions.Distances.CallDistanceAlongRoute = callDistKM * 1000
-		call.Extensions.Distances.PresentableDistance = presentableDistance(i, callDistKM, 0)
+		// per config rounding
+		call.Extensions.Distances.CallDistanceAlongRoute = roundTo(callDistKM*1000, c.Cfg.Converter.CallDistanceAlongRouteNumDigits)
+		// vehicle position distance from snapshot
+		vehKM := vehKMOverall
+		if !isNaN(vehKM) {
+			dfc := (callDistKM - vehKM) * 1000
+			call.Extensions.Distances.DistanceFromCall = &dfc
+			// presentable distance: use distance to current call and distance to immediate next stop
+			call.Extensions.Distances.PresentableDistance = presentableDistance(i, callDistKM-vehKM, nextStopDistKM)
+		}
 		calls = append(calls, call)
 	}
 	return map[string]any{"OnwardCall": calls}

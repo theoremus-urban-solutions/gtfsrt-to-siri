@@ -1,6 +1,8 @@
 package gtfsrtsiri
 
 import (
+	"context"
+	"errors"
 	"io"
 	"net/http"
 	"time"
@@ -12,6 +14,7 @@ import (
 type GTFSRTWrapper struct {
 	tripUpdatesURL      string
 	vehiclePositionsURL string
+	serviceAlertsURL    string
 
 	trips           map[string]struct{}
 	vehicleTS       map[string]int64
@@ -28,12 +31,34 @@ type GTFSRTWrapper struct {
 	tripLat        map[string]float64 // trip_id -> lat
 	tripLon        map[string]float64 // trip_id -> lon
 	tripBearing    map[string]float64 // trip_id -> bearing
+
+	// Alerts data (parsed from GTFS-RT Alerts)
+	alerts        []RTAlert
+	alertsByRoute map[string][]int // route_id -> indices in alerts slice
+	alertsByStop  map[string][]int // stop_id -> indices
+	alertsByTrip  map[string][]int // trip_id -> indices
 }
 
-func NewGTFSRTWrapper(tripUpdatesURL, vehiclePositionsURL string) *GTFSRTWrapper {
+// RTAlert is a simplified representation of a GTFS-RT Alert for SX building
+type RTAlert struct {
+	ID          string
+	Header      string
+	Description string
+	Cause       string
+	Effect      string
+	Severity    string
+	Start       int64
+	End         int64
+	RouteIDs    []string
+	StopIDs     []string
+	TripIDs     []string
+}
+
+func NewGTFSRTWrapper(tripUpdatesURL, vehiclePositionsURL, serviceAlertsURL string) *GTFSRTWrapper {
 	return &GTFSRTWrapper{
 		tripUpdatesURL:      tripUpdatesURL,
 		vehiclePositionsURL: vehiclePositionsURL,
+		serviceAlertsURL:    serviceAlertsURL,
 		trips:               map[string]struct{}{},
 		vehicleTS:           map[string]int64{},
 		headerTimestamp:     time.Now().Unix(),
@@ -47,6 +72,10 @@ func NewGTFSRTWrapper(tripUpdatesURL, vehiclePositionsURL string) *GTFSRTWrapper
 		tripLat:             map[string]float64{},
 		tripLon:             map[string]float64{},
 		tripBearing:         map[string]float64{},
+		alerts:              []RTAlert{},
+		alertsByRoute:       map[string][]int{},
+		alertsByStop:        map[string][]int{},
+		alertsByTrip:        map[string][]int{},
 	}
 }
 
@@ -63,6 +92,10 @@ func (w *GTFSRTWrapper) Refresh() error {
 	w.tripLat = map[string]float64{}
 	w.tripLon = map[string]float64{}
 	w.tripBearing = map[string]float64{}
+	w.alerts = []RTAlert{}
+	w.alertsByRoute = map[string][]int{}
+	w.alertsByStop = map[string][]int{}
+	w.alertsByTrip = map[string][]int{}
 	w.headerTimestamp = 0
 	if w.tripUpdatesURL != "" {
 		if fm, err := fetchFeed(w.tripUpdatesURL); err == nil && fm != nil {
@@ -143,6 +176,79 @@ func (w *GTFSRTWrapper) Refresh() error {
 			}
 		}
 	}
+	// Alerts feed (optional)
+	if w.serviceAlertsURL != "" {
+		if fm, err := fetchFeed(w.serviceAlertsURL); err == nil && fm != nil {
+			if fm.Header != nil && fm.Header.Timestamp != nil {
+				if ts := int64(*fm.Header.Timestamp); ts > w.headerTimestamp {
+					w.headerTimestamp = ts
+				}
+			}
+			// Parse alerts
+			for _, e := range fm.Entity {
+				if e.Alert == nil {
+					continue
+				}
+				a := e.Alert
+				ra := RTAlert{}
+				if e.Id != nil {
+					ra.ID = *e.Id
+				}
+				if a.HeaderText != nil {
+					ra.Header = translatedStringToText(a.HeaderText)
+				}
+				if a.DescriptionText != nil {
+					ra.Description = translatedStringToText(a.DescriptionText)
+				}
+				if a.Cause != nil {
+					ra.Cause = a.Cause.String()
+				}
+				if a.Effect != nil {
+					ra.Effect = a.Effect.String()
+				}
+				if a.SeverityLevel != nil {
+					ra.Severity = a.SeverityLevel.String()
+				}
+				// ActivePeriod: pick the first window (or the widest)
+				if len(a.ActivePeriod) > 0 {
+					ap := a.ActivePeriod[0]
+					if ap.Start != nil {
+						ra.Start = int64(*ap.Start)
+					}
+					if ap.End != nil {
+						ra.End = int64(*ap.End)
+					}
+				}
+				// Informed entities
+				for _, ie := range a.InformedEntity {
+					if ie.RouteId != nil {
+						rid := *ie.RouteId
+						ra.RouteIDs = append(ra.RouteIDs, rid)
+					}
+					if ie.Trip != nil && ie.Trip.TripId != nil {
+						tid := *ie.Trip.TripId
+						ra.TripIDs = append(ra.TripIDs, tid)
+					}
+					if ie.StopId != nil {
+						sid := *ie.StopId
+						ra.StopIDs = append(ra.StopIDs, sid)
+					}
+				}
+				// Append alert and index mappings
+				idx := len(w.alerts)
+				w.alerts = append(w.alerts, ra)
+				for _, rid := range ra.RouteIDs {
+					w.alertsByRoute[rid] = append(w.alertsByRoute[rid], idx)
+				}
+				for _, sid := range ra.StopIDs {
+					w.alertsByStop[sid] = append(w.alertsByStop[sid], idx)
+				}
+				for _, tid := range ra.TripIDs {
+					w.alertsByTrip[tid] = append(w.alertsByTrip[tid], idx)
+				}
+			}
+		}
+	}
 	if w.headerTimestamp == 0 {
 		w.headerTimestamp = time.Now().Unix()
 	}
@@ -150,20 +256,41 @@ func (w *GTFSRTWrapper) Refresh() error {
 }
 
 func fetchFeed(url string) (*gtfsrtpb.FeedMessage, error) {
-	resp, err := http.Get(url)
-	if err != nil {
-		return nil, err
+	// basic retry with backoff and context timeout
+	var lastErr error
+	timeout := 5 * time.Second
+	attempts := 3
+	for i := 0; i < attempts; i++ {
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		// optional headers could be injected here (API keys, etc.)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			lastErr = err
+			cancel()
+			time.Sleep(time.Duration(i+1) * 250 * time.Millisecond)
+			continue
+		}
+		b, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		cancel()
+		if err != nil {
+			lastErr = err
+			time.Sleep(time.Duration(i+1) * 250 * time.Millisecond)
+			continue
+		}
+		var fm gtfsrtpb.FeedMessage
+		if err := proto.Unmarshal(b, &fm); err != nil {
+			lastErr = err
+			time.Sleep(time.Duration(i+1) * 250 * time.Millisecond)
+			continue
+		}
+		return &fm, nil
 	}
-	defer resp.Body.Close()
-	b, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
+	if lastErr == nil {
+		lastErr = errors.New("failed to fetch feed")
 	}
-	var fm gtfsrtpb.FeedMessage
-	if err := proto.Unmarshal(b, &fm); err != nil {
-		return nil, err
-	}
-	return &fm, nil
+	return nil, lastErr
 }
 
 func (w *GTFSRTWrapper) GetAllMonitoredTrips() []string {
@@ -262,4 +389,30 @@ func (w *GTFSRTWrapper) GetStopsWithAlertFilterObject(trips []string) map[string
 }
 func (w *GTFSRTWrapper) GetRoutesWithAlertFilterObject(trips []string) map[string]bool {
 	return map[string]bool{}
+}
+
+// Accessors for alerts for SX builder
+func (w *GTFSRTWrapper) GetAlerts() []RTAlert                        { return w.alerts }
+func (w *GTFSRTWrapper) GetAlertIndicesByRoute(routeID string) []int { return w.alertsByRoute[routeID] }
+func (w *GTFSRTWrapper) GetAlertIndicesByStop(stopID string) []int   { return w.alertsByStop[stopID] }
+func (w *GTFSRTWrapper) GetAlertIndicesByTrip(tripID string) []int   { return w.alertsByTrip[tripID] }
+
+// translatedStringToText returns the best-effort text from a TranslatedString
+func translatedStringToText(ts *gtfsrtpb.TranslatedString) string {
+	if ts == nil || len(ts.Translation) == 0 {
+		return ""
+	}
+	// Prefer entries with no language tag or first entry
+	var first string
+	for _, tr := range ts.Translation {
+		if tr.Text != nil {
+			if tr.Language == nil || *tr.Language == "" {
+				return *tr.Text
+			}
+			if first == "" {
+				first = *tr.Text
+			}
+		}
+	}
+	return first
 }

@@ -5,7 +5,6 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"math"
 	"net/http"
@@ -128,105 +127,6 @@ func (g *GTFSIndex) loadFromLocalZip(path string) error {
 		g.shapeCumKM[shapeID] = cumulativeKM(pts)
 	}
 	return nil
-}
-
-// ExportIndexedSchedule emits a Node-like indexedScheduleData JSON blob.
-func (g *GTFSIndex) ExportIndexedSchedule() ([]byte, error) {
-	type agencyRec struct {
-		AgencyID       string `json:"agency_id"`
-		AgencyTimezone string `json:"agency_timezone"`
-	}
-	sched := map[string]any{}
-	// agency map keyed by agency_id for parity shape
-	agMap := map[string]agencyRec{}
-	if g.agencyID != "" {
-		agMap[g.agencyID] = agencyRec{AgencyID: g.agencyID, AgencyTimezone: g.agencyTZ}
-	} else {
-		agMap["AGENCY"] = agencyRec{AgencyID: g.agencyID, AgencyTimezone: g.agencyTZ}
-	}
-	sched["agency"] = agMap
-
-	// routes
-	routes := map[string]map[string]any{}
-	for rid := range g.routes {
-		routes[rid] = map[string]any{
-			"route_id":         rid,
-			"agency_id":        g.agencyID,
-			"route_short_name": g.routeShortNames[rid],
-		}
-	}
-	// If routes map is empty (e.g., loaded from ZIP without routes inserted into routes set), derive from routeShortNames
-	if len(routes) == 0 {
-		for rid := range g.routeShortNames {
-			routes[rid] = map[string]any{
-				"route_id":         rid,
-				"agency_id":        g.agencyID,
-				"route_short_name": g.routeShortNames[rid],
-			}
-		}
-	}
-	sched["routes"] = routes
-
-	// stops
-	stops := map[string]map[string]any{}
-	for sid, name := range g.stopNames {
-		coord := g.stopCoord[sid]
-		stops[sid] = map[string]any{
-			"stop_id":   sid,
-			"stop_name": name,
-			"stop_lat":  coord[1],
-			"stop_lon":  coord[0],
-		}
-	}
-	sched["stops"] = stops
-
-	// trips
-	trips := map[string]map[string]any{}
-	for tripKey, routeID := range g.tripToRoute {
-		dirStr := g.tripDirection[tripKey]
-		dir := 0
-		if dirStr == "1" {
-			dir = 1
-		}
-		trips[tripKey] = map[string]any{
-			"trip_id":       tripKey,
-			"route_id":      routeID,
-			"trip_headsign": g.tripHeadsign[tripKey],
-			"direction_id":  dir,
-			"shape_id":      g.tripShapeID[tripKey],
-			"block_id":      g.tripBlockID[tripKey],
-		}
-	}
-	sched["trips"] = trips
-
-	return json.Marshal(sched)
-}
-
-// ExportIndexedSpatial emits a Node-like indexedSpatialData JSON blob.
-func (g *GTFSIndex) ExportIndexedSpatial() ([]byte, error) {
-	// paths: shapeID -> [{latitude, longitude, dist_traveled}]
-	type pt struct {
-		Latitude     float64 `json:"latitude"`
-		Longitude    float64 `json:"longitude"`
-		DistTraveled float64 `json:"dist_traveled"`
-	}
-	paths := map[string][]pt{}
-	for shapeID, pts := range g.shapePoints {
-		var arr []pt
-		cum := g.shapeCumKM[shapeID]
-		for i := range pts {
-			d := 0.0
-			if i < len(cum) {
-				d = cum[i]
-			}
-			arr = append(arr, pt{Latitude: pts[i][1], Longitude: pts[i][0], DistTraveled: d})
-		}
-		paths[shapeID] = arr
-	}
-	spatial := map[string]any{
-		"paths": paths,
-	}
-	return json.Marshal(spatial)
 }
 
 // Utility converters for flexible JSON values
@@ -428,48 +328,7 @@ func (g *GTFSIndex) consumeCSV(f *zip.File) error {
 	return nil
 }
 
-// LoadZipAndExport runs the indexer: load a local GTFS zip and export Node-compatible JSON assets.
-func (g *GTFSIndex) LoadZipAndExport(zipPath, outSchedulePath, outSpatialPath string) error {
-	if zipPath == "" || outSchedulePath == "" || outSpatialPath == "" {
-		return fmt.Errorf("zip and output paths required")
-	}
-	// reset maps
-	*g = GTFSIndex{
-		routeShortNames: map[string]string{},
-		routes:          map[string]struct{}{},
-		tripToRoute:     map[string]string{},
-		tripHeadsign:    map[string]string{},
-		tripOriginStop:  map[string]string{},
-		tripDestStop:    map[string]string{},
-		tripDirection:   map[string]string{},
-		tripShapeID:     map[string]string{},
-		tripBlockID:     map[string]string{},
-		tripStopSeq:     map[string][]string{},
-		tripStopIdx:     map[string]map[string]int{},
-		stopNames:       map[string]string{},
-		stopCoord:       map[string][2]float64{},
-		shapePoints:     map[string][][2]float64{},
-		shapeCumKM:      map[string][]float64{},
-	}
-	if err := g.loadFromLocalZip(zipPath); err != nil {
-		return err
-	}
-	sched, err := g.ExportIndexedSchedule()
-	if err != nil {
-		return err
-	}
-	if err := os.WriteFile(outSchedulePath, sched, 0644); err != nil {
-		return err
-	}
-	spatial, err := g.ExportIndexedSpatial()
-	if err != nil {
-		return err
-	}
-	if err := os.WriteFile(outSpatialPath, spatial, 0644); err != nil {
-		return err
-	}
-	return nil
-}
+// Removed: index export helpers and indexer path (library is ZIP-only, in-memory)
 
 // Optionally used for debugging loaded data
 func (g *GTFSIndex) dumpDebugJSON(v any) []byte {

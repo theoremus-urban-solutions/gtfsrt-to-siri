@@ -34,7 +34,10 @@ func (rb *responseBuilder) BuildXML(res *SiriResponse) []byte {
 	for _, sm := range sd.StopMonitoringDelivery {
 		writeStopMonitoringXML(&b, sm)
 	}
-	// SituationExchangeDelivery (optional, omitted for now if empty)
+	// SituationExchangeDelivery
+	for _, sx := range sd.SituationExchangeDelivery {
+		writeSituationExchangeXML(&b, sx)
+	}
 	b.WriteString("</ServiceDelivery>")
 	b.WriteString("</Siri>")
 	return []byte(b.String())
@@ -277,6 +280,134 @@ func writeCallXML(b *strings.Builder, tag string, c SiriCall) {
 	b.WriteString("</CallDistanceAlongRoute>")
 	b.WriteString("</Distances></Extensions>")
 	b.WriteString("</" + tag + ">")
+}
+
+func writeSituationExchangeXML(b *strings.Builder, sx SituationExchange) {
+	// Expect sx.Situations to be []PtSituationElement
+	list, ok := sx.Situations.([]PtSituationElement)
+	if !ok {
+		// nothing to write
+		return
+	}
+	if len(list) == 0 {
+		return
+	}
+	b.WriteString("<SituationExchangeDelivery>")
+	b.WriteString("<Situations>")
+	for _, el := range list {
+		b.WriteString("<PtSituationElement>")
+		if el.SituationNumber != "" {
+			b.WriteString("<SituationNumber>")
+			b.WriteString(xmlEscape(el.SituationNumber))
+			b.WriteString("</SituationNumber>")
+		}
+		if el.Summary != "" {
+			b.WriteString("<Summary>")
+			b.WriteString(xmlEscape(el.Summary))
+			b.WriteString("</Summary>")
+		}
+		if el.Description != "" {
+			b.WriteString("<Description>")
+			b.WriteString(xmlEscape(el.Description))
+			b.WriteString("</Description>")
+		}
+		if el.Severity != "" {
+			b.WriteString("<Severity>")
+			b.WriteString(xmlEscape(el.Severity))
+			b.WriteString("</Severity>")
+		}
+		if el.Cause != "" {
+			b.WriteString("<Cause>")
+			b.WriteString(xmlEscape(el.Cause))
+			b.WriteString("</Cause>")
+		}
+		if el.Effect != "" {
+			b.WriteString("<Effect>")
+			b.WriteString(xmlEscape(el.Effect))
+			b.WriteString("</Effect>")
+		}
+		if el.PublicationWindow.StartTime != "" || el.PublicationWindow.EndTime != "" {
+			b.WriteString("<PublicationWindow>")
+			if el.PublicationWindow.StartTime != "" {
+				b.WriteString("<StartTime>")
+				b.WriteString(xmlEscape(el.PublicationWindow.StartTime))
+				b.WriteString("</StartTime>")
+			}
+			if el.PublicationWindow.EndTime != "" {
+				b.WriteString("<EndTime>")
+				b.WriteString(xmlEscape(el.PublicationWindow.EndTime))
+				b.WriteString("</EndTime>")
+			}
+			b.WriteString("</PublicationWindow>")
+		}
+		// Affects block
+		b.WriteString("<Affects>")
+		if len(el.Affects.VehicleJourneys) > 0 {
+			for _, vj := range el.Affects.VehicleJourneys {
+				b.WriteString("<VehicleJourney>")
+				if vj.DatedVehicleJourneyRef != "" {
+					b.WriteString("<DatedVehicleJourneyRef>")
+					b.WriteString(xmlEscape(vj.DatedVehicleJourneyRef))
+					b.WriteString("</DatedVehicleJourneyRef>")
+				}
+				if vj.LineRef != "" {
+					b.WriteString("<LineRef>")
+					b.WriteString(xmlEscape(vj.LineRef))
+					b.WriteString("</LineRef>")
+				}
+				if vj.DirectionRef != "" {
+					b.WriteString("<DirectionRef>")
+					b.WriteString(xmlEscape(vj.DirectionRef))
+					b.WriteString("</DirectionRef>")
+				}
+				b.WriteString("</VehicleJourney>")
+			}
+		}
+		if len(el.Affects.Routes) > 0 {
+			for _, r := range el.Affects.Routes {
+				b.WriteString("<Network>")
+				b.WriteString("<AffectedRoute>")
+				if r.LineRef != "" {
+					b.WriteString("<LineRef>")
+					b.WriteString(xmlEscape(r.LineRef))
+					b.WriteString("</LineRef>")
+				}
+				b.WriteString("</AffectedRoute>")
+				b.WriteString("</Network>")
+			}
+		}
+		if len(el.Affects.StopPoints) > 0 {
+			for _, sp := range el.Affects.StopPoints {
+				b.WriteString("<StopPoints>")
+				b.WriteString("<AffectedStopPoint>")
+				if sp.StopPointRef != "" {
+					b.WriteString("<StopPointRef>")
+					b.WriteString(xmlEscape(sp.StopPointRef))
+					b.WriteString("</StopPointRef>")
+				}
+				b.WriteString("</AffectedStopPoint>")
+				b.WriteString("</StopPoints>")
+			}
+		}
+		b.WriteString("</Affects>")
+		// Consequences block
+		if len(el.Consequences) > 0 {
+			b.WriteString("<Consequences>")
+			for _, c := range el.Consequences {
+				b.WriteString("<Consequence>")
+				if c.Condition != "" {
+					b.WriteString("<Condition>")
+					b.WriteString(xmlEscape(c.Condition))
+					b.WriteString("</Condition>")
+				}
+				b.WriteString("</Consequence>")
+			}
+			b.WriteString("</Consequences>")
+		}
+		b.WriteString("</PtSituationElement>")
+	}
+	b.WriteString("</Situations>")
+	b.WriteString("</SituationExchangeDelivery>")
 }
 
 func xmlEscape(s string) string {

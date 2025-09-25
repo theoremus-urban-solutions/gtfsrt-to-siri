@@ -15,7 +15,7 @@ type SiriServiceDelivery struct {
 type VehicleAndSituation struct {
 	ResponseTimestamp         string              `json:"ResponseTimestamp"`
 	VehicleMonitoringDelivery []VehicleMonitoring `json:"VehicleMonitoringDelivery"`
-	SituationExchangeDelivery []any               `json:"SituationExchangeDelivery"`
+	SituationExchangeDelivery []SituationExchange `json:"SituationExchangeDelivery"`
 	StopMonitoringDelivery    []StopMonitoring    `json:"StopMonitoringDelivery"`
 }
 
@@ -70,7 +70,7 @@ func (c *Converter) GetCompleteVehicleMonitoringResponse() *SiriResponse {
 	return &SiriResponse{Siri: SiriServiceDelivery{ServiceDelivery: VehicleAndSituation{
 		ResponseTimestamp:         iso8601FromUnixSeconds(timestamp),
 		VehicleMonitoringDelivery: []VehicleMonitoring{vm},
-		SituationExchangeDelivery: []any{},
+		SituationExchangeDelivery: []SituationExchange{},
 	}}}
 }
 

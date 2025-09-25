@@ -9,3 +9,7 @@ indexedSpatialData.json
 *.tmp
 *.log
 .DS_Store
+docs
+out
+
+gtfs-to-siri
