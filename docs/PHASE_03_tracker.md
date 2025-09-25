@@ -1,6 +1,6 @@
 # Phase 3 — Train Tracker Snapshot & Inference
 
-Goal: implement snapshot lifecycle, state machine, location inference, and presentable distance.
+Goal: implement snapshot lifecycle, state machine, location inference, and presentable distance. (Library scope only; no HTTP dependencies.)
 
 ## Snapshot (tracker.go)
 - [ ] newSnapshot(GTFS, GTFSrt, config, initialState)

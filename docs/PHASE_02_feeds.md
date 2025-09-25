@@ -1,10 +1,10 @@
-# Phase 02 — Feeds: GTFS Static Indices and GTFS-Realtime Reader
+# Phase 02 — Feeds: GTFS Static (ZIP) and GTFS-Realtime Reader
 
-Goal: load static GTFS indices and implement GTFS-RT protobuf reader + wrapper API compatible with Node usage.
+Goal: ingest GTFS static from a ZIP and implement GTFS-RT protobuf reader + wrapper API compatible with Node usage.
 
 ## GTFS Static (feed_gtfs.go)
-- [ ] Load indexedScheduleData.json & indexedSpatialData.json
-- [ ] Implement accessors used by Node code:
+- [ ] Ingest GTFS ZIP (routes.txt, trips.txt, stops.txt, stop_times.txt, agency.txt, shapes.txt)
+- [ ] Build in-memory indices used by Node code:
   - [ ] GetAgencyTimezone(agencyID)
   - [ ] getOriginStopIdForTrip(gtfsTripKey)
   - [ ] getDestinationStopIdForTrip(gtfsTripKey)
@@ -33,9 +33,5 @@ Goal: load static GTFS indices and implement GTFS-RT protobuf reader + wrapper A
   - [ ] Alerts: getAllTripsWithAlert(), getTrainsWithAlertFilterObject(), getStopsWithAlertFilterObject(), getRoutesWithAlertFilterObject()
 - [ ] Timezone: set agency timezone for time formatting
 
-## Health & Observability
-- [ ] Expose last successful GTFS-RT timestamp in health
-
 ## References
 - Node: lib/ConverterStream.js, lib/converter/*.js, lib/trainTracking/*.js
-- Server repo: proto_files/, GTFSRealtime_FeedReaderService.js

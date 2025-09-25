@@ -1,6 +1,6 @@
 # Phase 5 — Cache, Buffering, Query Selection
 
-Goal: pre-buffer journeys and calls for fast assembly; implement query processing and error responses.
+Goal: pre-buffer journeys and calls for fast assembly; implement query processing and error responses. (Library scope; emit SIRI error payloads, not HTTP statuses.)
 
 ## cache.go
 - [ ] Build existence maps for stops/routes (lowercased keys; apply mutators when needed)

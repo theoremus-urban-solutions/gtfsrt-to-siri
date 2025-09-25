@@ -15,15 +15,11 @@ Goal: validate inputs/outputs (optional), and ensure parity with Node implementa
 - [ ] Tracker: states and geometry transitions
 
 ## Integration tests
-- [ ] Replay sample GTFS + GTFS-RT messages (use server __tests__ samples) and compare against known-good golden buffers
+- [ ] Replay sample GTFS + GTFS-RT messages and compare against known-good golden buffers
 - [ ] Golden files: store response buffers and compare byte-for-byte
 
 ## Load/Concurrency
-- [ ] Basic RPS run; ensure no data races (go test -race)
-
-## Observability
-- [ ] Health returns recent timestamp after replay
-- [ ] Metrics counters increment properly
+- [ ] ensure no data races (go test -race)
 
 ## Parity Checklist
 - [ ] Field-by-field parity (JSON & XML) vs Node for representative trips/stops

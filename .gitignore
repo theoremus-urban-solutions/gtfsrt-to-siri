@@ -1,0 +1,11 @@
+# build artifacts
+cmd/gtfsrt-to-siri/gtfsrt-to-siri
+
+# indexes / outputs
+indexedScheduleData.json
+indexedSpatialData.json
+
+# vendor/cache
+*.tmp
+*.log
+.DS_Store

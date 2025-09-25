@@ -1,6 +1,6 @@
 # Phase 6 — Response Assembly (Buffers)
 
-Goal: assemble SIRI JSON/XML responses with pre-sized buffers, templates, and timestamp insertion.
+Goal: assemble SIRI JSON/XML responses with pre-sized buffers, templates, and timestamp insertion. (Library-only; HTTP streaming is out of scope.)
 
 ## response.go
 - [ ] Template chunks: define per-format chunk tables analogous to CachedMessageTemplateChunks.js

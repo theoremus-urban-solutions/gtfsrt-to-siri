@@ -1,6 +1,6 @@
 # Phase 4 — SIRI Builders
 
-Goal: implement MonitoredVehicleJourney, Calls, and SituationExchange builders matching Node semantics.
+Goal: implement MonitoredVehicleJourney, Calls, and SituationExchange builders matching Node semantics. (Library scope.)
 
 ## vm_builder.go (MonitoredVehicleJourney)
 - [ ] Build MVJ for each realtime trip

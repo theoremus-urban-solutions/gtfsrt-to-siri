@@ -7,14 +7,10 @@ import (
 )
 
 func main() {
-	mode := flag.String("mode", "server", "server|oneshot|indexer")
+	mode := flag.String("mode", "oneshot", "oneshot")
 	format := flag.String("format", "json", "json|xml")
 	call := flag.String("call", "vm", "vm|sm")
 	feedName := flag.String("feed", "", "feed name from config.feeds[]")
-	// indexer flags
-	gtfsZip := flag.String("gtfs_zip", "", "Path to local GTFS static zip (for indexer)")
-	outSchedule := flag.String("out_schedule", "", "Output path for indexedScheduleData.json")
-	outSpatial := flag.String("out_spatial", "", "Output path for indexedSpatialData.json")
 	tripUpdates := flag.String("tripUpdates", "", "GTFS-RT TripUpdates URL (overrides config)")
 	vehiclePositions := flag.String("vehiclePositions", "", "GTFS-RT VehiclePositions URL (overrides config)")
 	monitoringRef := flag.String("monitoringRef", "", "StopMonitoring MonitoringRef (stop_id)")
@@ -33,18 +29,6 @@ func main() {
 	gtfsCfg, rtCfg := lib.SelectFeed(*feedName)
 
 	switch *mode {
-	case "server":
-		lib.StartServer()
-		lib.HandleGracefulShutdown()
-	case "indexer":
-		if *gtfsZip == "" || *outSchedule == "" || *outSpatial == "" {
-			panic("indexer requires -gtfs_zip, -out_schedule, -out_spatial")
-		}
-		gtfs, _ := lib.NewGTFSIndexFromConfig(gtfsCfg)
-		if err := gtfs.LoadZipAndExport(*gtfsZip, *outSchedule, *outSpatial); err != nil {
-			panic(err)
-		}
-		fmt.Println("indexed assets written")
 	case "oneshot":
 		gtfs, _ := lib.NewGTFSIndexFromConfig(gtfsCfg)
 		tu := rtCfg.TripUpdatesURL

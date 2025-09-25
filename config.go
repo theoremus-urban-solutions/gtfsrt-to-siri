@@ -13,10 +13,8 @@ type ServerConfig struct {
 }
 
 type GTFSConfig struct {
-	IndexedSchedulePath string `yaml:"indexedScheduleData" validate:"omitempty"`
-	IndexedSpatialPath  string `yaml:"indexedSpatialData" validate:"omitempty"`
-	StaticURL           string `yaml:"staticURL" validate:"omitempty,url"`
-	AgencyID            string `yaml:"agency_id" validate:"omitempty"`
+	StaticURL string `yaml:"staticURL" validate:"omitempty,url"`
+	AgencyID  string `yaml:"agency_id" validate:"omitempty"`
 }
 
 type GTFSRTConfig struct {
