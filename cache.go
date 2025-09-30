@@ -41,8 +41,13 @@ func (cc *ConverterCache) build(res *SiriResponse, format string) []byte {
 func (cc *ConverterCache) GetSituationExchangeResponse(format string) ([]byte, error) {
 	ts := cc.converter.GTFSRT.GetTimestampForFeedMessage()
 	sx := cc.converter.BuildSituationExchange()
+	producerRef := cc.converter.Cfg.GTFS.AgencyID
+	if producerRef == "" {
+		producerRef = "UNKNOWN"
+	}
 	res := &SiriResponse{Siri: SiriServiceDelivery{ServiceDelivery: VehicleAndSituation{
 		ResponseTimestamp:         iso8601FromUnixSeconds(ts),
+		ProducerRef:               producerRef,
 		VehicleMonitoringDelivery: []VehicleMonitoring{},
 		SituationExchangeDelivery: []SituationExchange{sx},
 		StopMonitoringDelivery:    []StopMonitoring{},
@@ -146,8 +151,13 @@ func (cc *ConverterCache) buildVMResponse(trips []string, includeCalls bool) *Si
 		vm.VehicleActivity = append(vm.VehicleActivity, vat)
 	}
 	sx := cc.converter.BuildSituationExchange()
+	producerRef := cc.converter.Cfg.GTFS.AgencyID
+	if producerRef == "" {
+		producerRef = "UNKNOWN"
+	}
 	return &SiriResponse{Siri: SiriServiceDelivery{ServiceDelivery: VehicleAndSituation{
 		ResponseTimestamp:         iso8601FromUnixSeconds(ts),
+		ProducerRef:               producerRef,
 		VehicleMonitoringDelivery: []VehicleMonitoring{vm},
 		SituationExchangeDelivery: []SituationExchange{sx},
 	}}}
@@ -171,8 +181,13 @@ func (cc *ConverterCache) buildVMResponseWithCalls(trips []string, includeCalls 
 		vm.VehicleActivity = append(vm.VehicleActivity, vat)
 	}
 	sx := cc.converter.BuildSituationExchange()
+	producerRef := cc.converter.Cfg.GTFS.AgencyID
+	if producerRef == "" {
+		producerRef = "UNKNOWN"
+	}
 	return &SiriResponse{Siri: SiriServiceDelivery{ServiceDelivery: VehicleAndSituation{
 		ResponseTimestamp:         iso8601FromUnixSeconds(ts),
+		ProducerRef:               producerRef,
 		VehicleMonitoringDelivery: []VehicleMonitoring{vm},
 		SituationExchangeDelivery: []SituationExchange{sx},
 	}}}
@@ -207,8 +222,13 @@ func (cc *ConverterCache) buildSMResponse(stopID string, trips []string, maxOnwa
 		sm.MonitoredStopVisit = append(sm.MonitoredStopVisit, ms)
 	}
 	sx := cc.converter.BuildSituationExchange()
+	producerRef := cc.converter.Cfg.GTFS.AgencyID
+	if producerRef == "" {
+		producerRef = "UNKNOWN"
+	}
 	return &SiriResponse{Siri: SiriServiceDelivery{ServiceDelivery: VehicleAndSituation{
 		ResponseTimestamp:         iso8601FromUnixSeconds(ts),
+		ProducerRef:               producerRef,
 		VehicleMonitoringDelivery: []VehicleMonitoring{},
 		SituationExchangeDelivery: []SituationExchange{sx},
 		StopMonitoringDelivery:    []StopMonitoring{sm},

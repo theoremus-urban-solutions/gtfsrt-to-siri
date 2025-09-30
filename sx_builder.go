@@ -6,32 +6,44 @@ type SituationExchange struct {
 
 // SX structures (minimal subset)
 type PtSituationElement struct {
+	ParticipantRef    string `json:"ParticipantRef,omitempty"`
 	SituationNumber   string `json:"SituationNumber"`
-	Summary           string `json:"Summary"`
-	Description       string `json:"Description"`
-	Severity          string `json:"Severity"`
-	Cause             string `json:"Cause"`
-	Effect            string `json:"Effect"`
+	SourceType        string `json:"SourceType,omitempty"`
+	Progress          string `json:"Progress,omitempty"`
 	PublicationWindow struct {
 		StartTime string `json:"StartTime"`
 		EndTime   string `json:"EndTime"`
 	} `json:"PublicationWindow"`
-	Affects struct {
-		VehicleJourneys []AffectedVehicleJourney `json:"VehicleJourneys"`
-		Routes          []AffectedRoute          `json:"Routes"`
-		StopPoints      []AffectedStopPoint      `json:"StopPoints"`
+	Severity    string `json:"Severity"`
+	ReportType  string `json:"ReportType,omitempty"`
+	Summary     string `json:"Summary"`
+	Description string `json:"Description"`
+	Affects     struct {
+		Networks        []AffectedNetwork        `json:"Networks,omitempty"`
+		VehicleJourneys []AffectedVehicleJourney `json:"VehicleJourneys,omitempty"`
+		StopPoints      []AffectedStopPoint      `json:"StopPoints,omitempty"`
 	} `json:"Affects"`
 	Consequences []Consequence `json:"Consequences,omitempty"`
+}
+
+type AffectedNetwork struct {
+	AffectedLines []AffectedLine `json:"AffectedLines,omitempty"`
+}
+
+type AffectedLine struct {
+	LineRef        string          `json:"LineRef"`
+	AffectedRoutes []AffectedRoute `json:"AffectedRoutes,omitempty"`
+}
+
+type AffectedRoute struct {
+	DirectionRef string              `json:"DirectionRef,omitempty"`
+	StopPoints   []AffectedStopPoint `json:"StopPoints,omitempty"`
 }
 
 type AffectedVehicleJourney struct {
 	DatedVehicleJourneyRef string `json:"DatedVehicleJourneyRef"`
 	LineRef                string `json:"LineRef,omitempty"`
 	DirectionRef           string `json:"DirectionRef,omitempty"`
-}
-
-type AffectedRoute struct {
-	LineRef string `json:"LineRef"`
 }
 
 type AffectedStopPoint struct {
@@ -46,14 +58,28 @@ type Consequence struct {
 func (c *Converter) BuildSituationExchange() SituationExchange {
 	alerts := c.GTFSRT.GetAlerts()
 	elements := make([]PtSituationElement, 0, len(alerts))
+	now := c.GTFSRT.GetTimestampForFeedMessage()
 	for _, a := range alerts {
+		severity, effectPrefix := mapGTFSRTEffectToSIRISeverity(a.Effect)
+		description := a.Description
+		if effectPrefix != "" {
+			description = effectPrefix + ": " + a.Description
+		}
+		// Build situation number with codespace prefix
+		codespace := c.Cfg.GTFS.AgencyID
+		if codespace == "" {
+			codespace = "UNKNOWN"
+		}
+		situationNumber := codespace + ":SituationNumber:" + a.ID
+
 		el := PtSituationElement{
-			SituationNumber: a.ID,
-			Summary:         a.Header,
-			Description:     a.Description,
-			Severity:        mapGTFSRTSeverityToSIRI(a.Severity),
-			Cause:           mapGTFSRTCauseToSIRI(a.Cause),
-			Effect:          mapGTFSRTEffectToSIRI(a.Effect),
+			ParticipantRef:  codespace,
+			SituationNumber: situationNumber,
+			SourceType:      "directReport",
+			Severity:        severity,
+			ReportType:      mapGTFSRTCauseToReportType(a.Cause),
+			Summary:         mapGTFSRTCauseToSummary(a.Cause),
+			Description:     description,
 		}
 		if a.Start > 0 {
 			el.PublicationWindow.StartTime = iso8601FromUnixSeconds(a.Start)
@@ -61,7 +87,19 @@ func (c *Converter) BuildSituationExchange() SituationExchange {
 		if a.End > 0 {
 			el.PublicationWindow.EndTime = iso8601FromUnixSeconds(a.End)
 		}
-		// Build VehicleJourneys with LineRef and DirectionRef (dedupe by trip)
+		// Set Progress based on validity period
+		if a.End > 0 && a.End < now {
+			el.Progress = "closed"
+		} else {
+			el.Progress = "open"
+		}
+		// Build Affects structure based on GTFS-RT informed_entity
+		// According to affects.md mapping:
+		// - Route-only alerts -> Networks > AffectedLine
+		// - Trip alerts -> VehicleJourneys
+		// - Stop-only alerts -> StopPoints at Affects level
+
+		// Build VehicleJourneys for trip-level alerts
 		seenTrips := map[string]bool{}
 		for _, tid := range a.TripIDs {
 			if seenTrips[tid] {
@@ -71,31 +109,36 @@ func (c *Converter) BuildSituationExchange() SituationExchange {
 			vj := AffectedVehicleJourney{
 				DatedVehicleJourneyRef: TripKeyForConverter(tid, c.Cfg.GTFS.AgencyID, c.GTFSRT.GetStartDateForTrip(tid)),
 			}
-			// LineRef from route (optionally agency-prefixed)
+			// LineRef from route (use raw route_id, no agency prefix)
 			if rid := c.GTFSRT.GetRouteIDForTrip(tid); rid != "" {
-				lineRef := rid
-				if c.Cfg.GTFS.AgencyID != "" {
-					lineRef = c.Cfg.GTFS.AgencyID + "_" + rid
-				}
-				vj.LineRef = lineRef
+				vj.LineRef = rid
 			}
 			if dir := c.GTFSRT.GetRouteDirectionForTrip(tid); dir != "" {
 				vj.DirectionRef = dir
 			}
 			el.Affects.VehicleJourneys = append(el.Affects.VehicleJourneys, vj)
 		}
-		for _, rid := range a.RouteIDs {
-			lineRef := rid
-			if c.Cfg.GTFS.AgencyID != "" {
-				lineRef = c.Cfg.GTFS.AgencyID + "_" + rid
+
+		// Build Networks > AffectedLine for route-level alerts
+		if len(a.RouteIDs) > 0 {
+			network := AffectedNetwork{}
+			for _, rid := range a.RouteIDs {
+				affectedLine := AffectedLine{
+					LineRef: rid,
+				}
+				network.AffectedLines = append(network.AffectedLines, affectedLine)
 			}
-			el.Affects.Routes = append(el.Affects.Routes, AffectedRoute{LineRef: lineRef})
+			el.Affects.Networks = append(el.Affects.Networks, network)
 		}
+
+		// Build StopPoints for stop-only alerts (at Affects level)
 		for _, sid := range a.StopIDs {
-			el.Affects.StopPoints = append(el.Affects.StopPoints, AffectedStopPoint{StopPointRef: applyFieldMutators(sid, c.Cfg.Converter.FieldMutators.StopPointRef)})
+			el.Affects.StopPoints = append(el.Affects.StopPoints, AffectedStopPoint{
+				StopPointRef: applyFieldMutators(sid, c.Cfg.Converter.FieldMutators.StopPointRef),
+			})
 		}
-		// Add Consequences derived from normalized Effect
-		if cond := effectToCondition(el.Effect); cond != "" {
+		// Add Consequences derived from GTFS-RT Effect
+		if cond := effectToCondition(a.Effect); cond != "" {
 			el.Consequences = []Consequence{{Condition: cond}}
 		}
 		elements = append(elements, el)
@@ -103,52 +146,81 @@ func (c *Converter) BuildSituationExchange() SituationExchange {
 	return SituationExchange{Situations: elements}
 }
 
-// Minimal normalizers for GTFS-RT → SIRI values
-func mapGTFSRTSeverityToSIRI(gtfsrtSeverity string) string {
-	switch gtfsrtSeverity {
-	case "UNKNOWN_SEVERITY":
-		return "unknown"
-	case "NO_IMPACT", "OTHER_SEVERITY", "INFO":
-		return "normal"
-	case "WARNING":
-		return "warning"
-	case "SEVERE":
-		return "severe"
-	case "VERY_SEVERE":
-		return "verySevere"
+// mapGTFSRTEffectToSIRISeverity maps GTFS-RT Effect to SIRI Severity
+// Returns (severity, effectPrefix) where effectPrefix is prepended to Description if not empty
+func mapGTFSRTEffectToSIRISeverity(gtfsrtEffect string) (string, string) {
+	switch gtfsrtEffect {
+	case "NO_SERVICE":
+		return "noService", ""
+	case "REDUCED_SERVICE":
+		return "severe", ""
+	case "SIGNIFICANT_DELAYS":
+		return "severe", ""
+	case "DETOUR":
+		return "slight", ""
+	case "ADDITIONAL_SERVICE":
+		return "normal", ""
+	case "MODIFIED_SERVICE":
+		return "slight", "Modified Service"
+	case "OTHER_EFFECT":
+		return "undefined", "Other"
+	case "UNKNOWN_EFFECT":
+		return "undefined", ""
+	case "STOP_MOVED":
+		return "slight", ""
+	case "NO_EFFECT":
+		return "noImpact", ""
+	case "ACCESSIBILITY_ISSUE":
+		return "undefined", "Accessibility Issue"
 	default:
-		return "unknown"
+		return "undefined", ""
 	}
 }
 
-func mapGTFSRTCauseToSIRI(gtfsrtCause string) string {
+func mapGTFSRTCauseToSummary(gtfsrtCause string) string {
 	switch gtfsrtCause {
+	case "UNKNOWN_CAUSE":
+		return "Unknown cause"
+	case "OTHER_CAUSE":
+		return "Other cause"
 	case "TECHNICAL_PROBLEM":
-		return "TechnicalProblem"
-	case "CONSTRUCTION":
-		return "Construction"
-	case "MAINTENANCE":
-		return "Maintenance"
-	case "WEATHER":
-		return "Weather"
-	case "ACCIDENT":
-		return "Accident"
-	case "MEDICAL_EMERGENCY":
-		return "MedicalEmergency"
-	case "POLICE_ACTIVITY":
-		return "PoliceActivity"
+		return "Technical problem"
 	case "STRIKE":
-		return "IndustrialAction"
+		return "Strike or unavailable staff"
 	case "DEMONSTRATION":
 		return "Demonstration"
-	case "OTHER_CAUSE":
-		return "Other"
+	case "ACCIDENT":
+		return "Accident"
+	case "HOLIDAY":
+		return "Holiday"
+	case "WEATHER":
+		return "Weather related"
+	case "MAINTENANCE":
+		return "Maintenance"
+	case "CONSTRUCTION":
+		return "Construction work"
+	case "POLICE_ACTIVITY":
+		return "Police activity"
+	case "MEDICAL_EMERGENCY":
+		return "Medical emergency"
+	case "EQUIPMENT_FAILURE":
+		return "Equipment failure"
 	default:
-		return "Unknown"
+		return "Unknown cause"
 	}
 }
 
-func mapGTFSRTEffectToSIRI(gtfsrtEffect string) string {
+func mapGTFSRTCauseToReportType(gtfsrtCause string) string {
+	switch gtfsrtCause {
+	case "STRIKE", "ACCIDENT", "POLICE_ACTIVITY", "MEDICAL_EMERGENCY":
+		return "incident"
+	default:
+		return "general"
+	}
+}
+
+// Map GTFS-RT Effect → SIRI Consequence Condition (minimal set)
+func effectToCondition(gtfsrtEffect string) string {
 	switch gtfsrtEffect {
 	case "NO_SERVICE":
 		return "NoService"
@@ -157,45 +229,7 @@ func mapGTFSRTEffectToSIRI(gtfsrtEffect string) string {
 	case "SIGNIFICANT_DELAYS":
 		return "SevereDelays"
 	case "DETOUR":
-		return "Detour"
-	case "ADDITIONAL_SERVICE":
-		return "AdditionalService"
-	case "MODIFIED_SERVICE":
-		return "AlteredService"
-	case "STOP_MOVED":
-		return "StopPointRelocation"
-	case "STOPS_CHANGED":
-		return "StopPointChange"
-	case "ACCESSIBILITY_ISSUE":
-		return "AccessibilityIssue"
-	case "MAINTENANCE_WORK":
-		return "MaintenanceWork"
-	case "CONSTRUCTION":
-		return "Construction"
-	case "DELAY":
-		return "Delay"
-	case "CANCELLATION":
-		return "Cancellation"
-	default:
-		return "Other"
-	}
-}
-
-// Map SIRI Effect → SIRI Consequence Condition (minimal set)
-func effectToCondition(effect string) string {
-	switch effect {
-	case "NoService":
-		return "NoService"
-	case "ReducedService":
-		return "ReducedService"
-	case "SevereDelays":
-		return "SevereDelays"
-	case "Delay":
-		return "Delayed"
-	case "Detour":
 		return "Diversion"
-	case "Cancellation":
-		return "Cancellation"
 	default:
 		return ""
 	}

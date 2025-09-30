@@ -26,6 +26,11 @@ func (rb *responseBuilder) BuildXML(res *SiriResponse) []byte {
 		b.WriteString(xmlEscape(sd.ResponseTimestamp))
 		b.WriteString("</ResponseTimestamp>")
 	}
+	if sd.ProducerRef != "" {
+		b.WriteString("<ProducerRef>")
+		b.WriteString(xmlEscape(sd.ProducerRef))
+		b.WriteString("</ProducerRef>")
+	}
 	// VehicleMonitoringDelivery (support multiple deliveries)
 	for _, vm := range sd.VehicleMonitoringDelivery {
 		writeVehicleMonitoringXML(&b, vm)
@@ -296,10 +301,53 @@ func writeSituationExchangeXML(b *strings.Builder, sx SituationExchange) {
 	b.WriteString("<Situations>")
 	for _, el := range list {
 		b.WriteString("<PtSituationElement>")
+		// Order: ParticipantRef, SituationNumber, Source, Progress, ValidityPeriod (PublicationWindow), UndefinedReason, Severity, ReportType, Summary, Description, Affects
+		if el.ParticipantRef != "" {
+			b.WriteString("<ParticipantRef>")
+			b.WriteString(xmlEscape(el.ParticipantRef))
+			b.WriteString("</ParticipantRef>")
+		}
 		if el.SituationNumber != "" {
 			b.WriteString("<SituationNumber>")
 			b.WriteString(xmlEscape(el.SituationNumber))
 			b.WriteString("</SituationNumber>")
+		}
+		if el.SourceType != "" {
+			b.WriteString("<Source>")
+			b.WriteString("<SourceType>")
+			b.WriteString(xmlEscape(el.SourceType))
+			b.WriteString("</SourceType>")
+			b.WriteString("</Source>")
+		}
+		if el.Progress != "" {
+			b.WriteString("<Progress>")
+			b.WriteString(xmlEscape(el.Progress))
+			b.WriteString("</Progress>")
+		}
+		if el.PublicationWindow.StartTime != "" || el.PublicationWindow.EndTime != "" {
+			b.WriteString("<ValidityPeriod>")
+			if el.PublicationWindow.StartTime != "" {
+				b.WriteString("<StartTime>")
+				b.WriteString(xmlEscape(el.PublicationWindow.StartTime))
+				b.WriteString("</StartTime>")
+			}
+			if el.PublicationWindow.EndTime != "" {
+				b.WriteString("<EndTime>")
+				b.WriteString(xmlEscape(el.PublicationWindow.EndTime))
+				b.WriteString("</EndTime>")
+			}
+			b.WriteString("</ValidityPeriod>")
+		}
+		b.WriteString("<UndefinedReason/>")
+		if el.Severity != "" {
+			b.WriteString("<Severity>")
+			b.WriteString(xmlEscape(el.Severity))
+			b.WriteString("</Severity>")
+		}
+		if el.ReportType != "" {
+			b.WriteString("<ReportType>")
+			b.WriteString(xmlEscape(el.ReportType))
+			b.WriteString("</ReportType>")
 		}
 		if el.Summary != "" {
 			b.WriteString("<Summary>")
@@ -311,37 +359,54 @@ func writeSituationExchangeXML(b *strings.Builder, sx SituationExchange) {
 			b.WriteString(xmlEscape(el.Description))
 			b.WriteString("</Description>")
 		}
-		if el.Severity != "" {
-			b.WriteString("<Severity>")
-			b.WriteString(xmlEscape(el.Severity))
-			b.WriteString("</Severity>")
-		}
-		if el.Cause != "" {
-			b.WriteString("<Cause>")
-			b.WriteString(xmlEscape(el.Cause))
-			b.WriteString("</Cause>")
-		}
-		if el.Effect != "" {
-			b.WriteString("<Effect>")
-			b.WriteString(xmlEscape(el.Effect))
-			b.WriteString("</Effect>")
-		}
-		if el.PublicationWindow.StartTime != "" || el.PublicationWindow.EndTime != "" {
-			b.WriteString("<PublicationWindow>")
-			if el.PublicationWindow.StartTime != "" {
-				b.WriteString("<StartTime>")
-				b.WriteString(xmlEscape(el.PublicationWindow.StartTime))
-				b.WriteString("</StartTime>")
-			}
-			if el.PublicationWindow.EndTime != "" {
-				b.WriteString("<EndTime>")
-				b.WriteString(xmlEscape(el.PublicationWindow.EndTime))
-				b.WriteString("</EndTime>")
-			}
-			b.WriteString("</PublicationWindow>")
-		}
 		// Affects block
 		b.WriteString("<Affects>")
+		// Networks > AffectedNetwork > AffectedLine > AffectedRoute
+		if len(el.Affects.Networks) > 0 {
+			b.WriteString("<Networks>")
+			for _, network := range el.Affects.Networks {
+				b.WriteString("<AffectedNetwork>")
+				for _, line := range network.AffectedLines {
+					b.WriteString("<AffectedLine>")
+					if line.LineRef != "" {
+						b.WriteString("<LineRef>")
+						b.WriteString(xmlEscape(line.LineRef))
+						b.WriteString("</LineRef>")
+					}
+					// AffectedRoutes with Direction and StopPoints
+					if len(line.AffectedRoutes) > 0 {
+						for _, route := range line.AffectedRoutes {
+							b.WriteString("<AffectedRoute>")
+							if route.DirectionRef != "" {
+								b.WriteString("<Direction>")
+								b.WriteString("<DirectionRef>")
+								b.WriteString(xmlEscape(route.DirectionRef))
+								b.WriteString("</DirectionRef>")
+								b.WriteString("</Direction>")
+							}
+							if len(route.StopPoints) > 0 {
+								b.WriteString("<StopPoints>")
+								for _, sp := range route.StopPoints {
+									b.WriteString("<AffectedStopPoint>")
+									if sp.StopPointRef != "" {
+										b.WriteString("<StopPointRef>")
+										b.WriteString(xmlEscape(sp.StopPointRef))
+										b.WriteString("</StopPointRef>")
+									}
+									b.WriteString("</AffectedStopPoint>")
+								}
+								b.WriteString("</StopPoints>")
+							}
+							b.WriteString("</AffectedRoute>")
+						}
+					}
+					b.WriteString("</AffectedLine>")
+				}
+				b.WriteString("</AffectedNetwork>")
+			}
+			b.WriteString("</Networks>")
+		}
+		// VehicleJourneys
 		if len(el.Affects.VehicleJourneys) > 0 {
 			for _, vj := range el.Affects.VehicleJourneys {
 				b.WriteString("<VehicleJourney>")
@@ -363,22 +428,10 @@ func writeSituationExchangeXML(b *strings.Builder, sx SituationExchange) {
 				b.WriteString("</VehicleJourney>")
 			}
 		}
-		if len(el.Affects.Routes) > 0 {
-			for _, r := range el.Affects.Routes {
-				b.WriteString("<Network>")
-				b.WriteString("<AffectedRoute>")
-				if r.LineRef != "" {
-					b.WriteString("<LineRef>")
-					b.WriteString(xmlEscape(r.LineRef))
-					b.WriteString("</LineRef>")
-				}
-				b.WriteString("</AffectedRoute>")
-				b.WriteString("</Network>")
-			}
-		}
+		// StopPoints (at Affects level for stop-only alerts)
 		if len(el.Affects.StopPoints) > 0 {
+			b.WriteString("<StopPoints>")
 			for _, sp := range el.Affects.StopPoints {
-				b.WriteString("<StopPoints>")
 				b.WriteString("<AffectedStopPoint>")
 				if sp.StopPointRef != "" {
 					b.WriteString("<StopPointRef>")
@@ -386,8 +439,8 @@ func writeSituationExchangeXML(b *strings.Builder, sx SituationExchange) {
 					b.WriteString("</StopPointRef>")
 				}
 				b.WriteString("</AffectedStopPoint>")
-				b.WriteString("</StopPoints>")
 			}
+			b.WriteString("</StopPoints>")
 		}
 		b.WriteString("</Affects>")
 		// Consequences block
