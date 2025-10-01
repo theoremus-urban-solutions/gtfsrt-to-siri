@@ -77,35 +77,7 @@ func ensureOperatorValid(op string, gtfs *GTFSIndex) error {
 	return &QueryError{Msg: "No such operator: " + op}
 }
 
-func parseAndValidateStopMonitoring(params map[string]string, gtfs *GTFSIndex) (map[string]string, error) {
-	m := map[string]string{}
-	for k, v := range params {
-		m[lower(k)] = strings.TrimSpace(v)
-		m["_"+k] = v
-	}
-	if err := ensureStopExists(m["monitoringref"], gtfs); err != nil {
-		return nil, err
-	}
-	if dr := m["directionref"]; dr != "" && dr != "0" && dr != "1" {
-		return nil, &QueryError{Msg: "DirectionRef must be either 0 or 1."}
-	}
-	if _, err := ensureRouteExists(m["lineref"], gtfs); err != nil {
-		return nil, err
-	}
-	if err := ensureOperatorValid(m["operatorref"], gtfs); err != nil {
-		return nil, err
-	}
-	if _, err := parseNonNegativeInt(m["maximumstopvisits"]); err != nil {
-		return nil, err
-	}
-	if _, err := parseNonNegativeInt(m["minimumstopvisitsperline"]); err != nil {
-		return nil, err
-	}
-	if _, err := parseNonNegativeInt(m["maximumnumberofcallsonwards"]); err != nil {
-		return nil, err
-	}
-	return m, nil
-}
+// parseAndValidateStopMonitoring removed - replaced with ET (Estimated Timetable)
 
 func parseAndValidateVehicleMonitoring(params map[string]string, gtfs *GTFSIndex) (map[string]string, error) {
 	m := map[string]string{}

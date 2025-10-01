@@ -21,10 +21,7 @@ type MonitoredVehicleJourney struct {
 	OnwardCalls              any      `json:"OnwardCalls"`
 }
 
-type FramedVehicleJourneyRef struct {
-	DataFrameRef           string `json:"DataFrameRef"`
-	DatedVehicleJourneyRef string `json:"DatedVehicleJourneyRef"`
-}
+// FramedVehicleJourneyRef moved to et_builder.go to avoid duplication
 
 type VehicleLocation struct {
 	Latitude  *float64 `json:"Latitude"`

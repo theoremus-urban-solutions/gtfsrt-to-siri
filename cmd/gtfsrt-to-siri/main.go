@@ -10,17 +10,14 @@ import (
 func main() {
 	mode := flag.String("mode", "oneshot", "oneshot")
 	format := flag.String("format", "json", "json|xml")
-	call := flag.String("call", "vm", "vm|sm|sx")
+	call := flag.String("call", "vm", "vm|et|sx")
 	feedName := flag.String("feed", "", "feed name from config.feeds[]")
 	tripUpdates := flag.String("tripUpdates", "", "GTFS-RT TripUpdates URL (overrides config)")
 	vehiclePositions := flag.String("vehiclePositions", "", "GTFS-RT VehiclePositions URL (overrides config)")
 	serviceAlerts := flag.String("serviceAlerts", "", "GTFS-RT ServiceAlerts URL (overrides config)")
-	monitoringRef := flag.String("monitoringRef", "", "StopMonitoring MonitoringRef (stop_id)")
-	maxOnward := flag.Int("maxOnward", -1, "MaximumNumberOfCallsOnwards")
+	monitoringRef := flag.String("monitoringRef", "", "MonitoringRef (stop_id) for filtering")
 	lineRef := flag.String("lineRef", "", "LineRef filter (route or AGENCY_route)")
 	directionRef := flag.String("directionRef", "", "DirectionRef filter (0|1)")
-	maximumStopVisits := flag.Int("maximumStopVisits", -1, "MaximumStopVisits (SM selection)")
-	minimumStopVisitsPerLine := flag.Int("minimumStopVisitsPerLine", -1, "MinimumStopVisitsPerLine (SM selection)")
 	modules := flag.String("modules", "tu,vp", "Comma-separated GTFS-RT modules to fetch: tu,vp,alerts")
 	flag.Parse()
 
@@ -79,31 +76,18 @@ func main() {
 		cache := lib.NewConverterCache(conv)
 		var buf []byte
 		var err error
-		if *call == "sm" {
-			ref := *monitoringRef
-			if ref == "" {
-				stops := gtfs.GetAllStops()
-				if len(stops) > 0 {
-					ref = stops[0]
-				}
+		if *call == "et" {
+			params := map[string]string{}
+			if *monitoringRef != "" {
+				params["monitoringref"] = *monitoringRef
 			}
-			params := map[string]string{"monitoringref": ref}
 			if *lineRef != "" {
 				params["lineref"] = *lineRef
 			}
 			if *directionRef != "" {
 				params["directionref"] = *directionRef
 			}
-			if *maxOnward >= 0 {
-				params["maximumnumberofcallsonwards"] = fmt.Sprintf("%d", *maxOnward)
-			}
-			if *maximumStopVisits >= 0 {
-				params["maximumstopvisits"] = fmt.Sprintf("%d", *maximumStopVisits)
-			}
-			if *minimumStopVisitsPerLine >= 0 {
-				params["minimumstopvisitsperline"] = fmt.Sprintf("%d", *minimumStopVisitsPerLine)
-			}
-			buf, err = cache.GetStopMonitoringResponse(params, *format)
+			buf, err = cache.GetEstimatedTimetableResponse(params, *format)
 		} else if *call == "vm" {
 			buf, err = cache.GetVehicleMonitoringResponse(map[string]string{}, *format)
 		} else if *call == "sx" {

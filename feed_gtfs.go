@@ -22,7 +22,9 @@ type Waypoint struct {
 type GTFSIndex struct {
 	agencyID        string
 	agencyTZ        string
+	agencyName      string                    // agency_name from agency.txt
 	routeShortNames map[string]string         // route_id -> short_name
+	routeTypes      map[string]int            // route_id -> route_type (GTFS enum)
 	routes          map[string]struct{}       // route existence set
 	tripToRoute     map[string]string         // trip_id -> route_id
 	tripHeadsign    map[string]string         // trip_id -> headsign
@@ -42,6 +44,7 @@ type GTFSIndex struct {
 func NewGTFSIndex(indexedSchedulePath, indexedSpatialPath string) (*GTFSIndex, error) {
 	return &GTFSIndex{
 		routeShortNames: map[string]string{},
+		routeTypes:      map[string]int{},
 		routes:          map[string]struct{}{},
 		tripToRoute:     map[string]string{},
 		tripHeadsign:    map[string]string{},
@@ -200,9 +203,15 @@ func (g *GTFSIndex) consumeCSV(f *zip.File) error {
 	case "routes.txt":
 		rID := idx("route_id")
 		rSN := idx("route_short_name")
+		rType := idx("route_type")
 		for _, row := range rec[1:] {
 			if rID >= 0 && rSN >= 0 {
 				g.routeShortNames[row[rID]] = row[rSN]
+			}
+			if rID >= 0 && rType >= 0 {
+				if typeInt, err := strconv.Atoi(row[rType]); err == nil {
+					g.routeTypes[row[rID]] = typeInt
+				}
 			}
 		}
 	case "trips.txt":
@@ -286,12 +295,16 @@ func (g *GTFSIndex) consumeCSV(f *zip.File) error {
 	case "agency.txt":
 		agID := idx("agency_id")
 		agTZ := idx("agency_timezone")
+		agName := idx("agency_name")
 		if len(rec) > 1 {
 			if agID >= 0 && g.agencyID == "" {
 				g.agencyID = rec[1][agID]
 			}
 			if agTZ >= 0 {
 				g.agencyTZ = rec[1][agTZ]
+			}
+			if agName >= 0 {
+				g.agencyName = rec[1][agName]
 			}
 		}
 	case "shapes.txt":
@@ -353,6 +366,8 @@ func (g *GTFSIndex) GetShapeIDForTrip(gtfsTripKey string) string    { return g.t
 func (g *GTFSIndex) GetFullTripIDForTrip(gtfsTripKey string) string { return gtfsTripKey }
 func (g *GTFSIndex) GetBlockIDForTrip(gtfsTripKey string) string    { return g.tripBlockID[gtfsTripKey] }
 func (g *GTFSIndex) GetRouteShortName(routeID string) string        { return g.routeShortNames[routeID] }
+func (g *GTFSIndex) GetRouteType(routeID string) int                { return g.routeTypes[routeID] }
+func (g *GTFSIndex) GetAgencyName() string                          { return g.agencyName }
 func (g *GTFSIndex) GetStopName(stopID string) string               { return g.stopNames[stopID] }
 
 func (g *GTFSIndex) GetStopDistanceAlongRouteForTripInMeters(gtfsTripKey, stopID string) float64 {

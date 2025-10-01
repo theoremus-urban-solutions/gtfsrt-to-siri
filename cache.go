@@ -46,11 +46,11 @@ func (cc *ConverterCache) GetSituationExchangeResponse(format string) ([]byte, e
 		producerRef = "UNKNOWN"
 	}
 	res := &SiriResponse{Siri: SiriServiceDelivery{ServiceDelivery: VehicleAndSituation{
-		ResponseTimestamp:         iso8601FromUnixSeconds(ts),
-		ProducerRef:               producerRef,
-		VehicleMonitoringDelivery: []VehicleMonitoring{},
-		SituationExchangeDelivery: []SituationExchange{sx},
-		StopMonitoringDelivery:    []StopMonitoring{},
+		ResponseTimestamp:          iso8601FromUnixSeconds(ts),
+		ProducerRef:                producerRef,
+		VehicleMonitoringDelivery:  []VehicleMonitoring{},
+		SituationExchangeDelivery:  []SituationExchange{sx},
+		EstimatedTimetableDelivery: []EstimatedTimetable{},
 	}}}
 	return cc.build(res, format), nil
 }
@@ -193,153 +193,33 @@ func (cc *ConverterCache) buildVMResponseWithCalls(trips []string, includeCalls 
 	}}}
 }
 
-func (cc *ConverterCache) buildSMResponse(stopID string, trips []string, maxOnward int) *SiriResponse {
+// buildSMResponse removed - replaced with ET (Estimated Timetable)
+
+func (cc *ConverterCache) GetEstimatedTimetableResponse(params map[string]string, format string) ([]byte, error) {
+	if params == nil {
+		params = map[string]string{}
+	}
+
+	key := cc.memoKey("et", format, strings.ToLower(params["lineref"]), strings.ToLower(params["directionref"]), strings.ToLower(params["monitoringref"]))
+	if buf, ok := cc.responseCache[key]; ok {
+		return buf, nil
+	}
+
 	ts := cc.converter.GTFSRT.GetTimestampForFeedMessage()
-	sm := StopMonitoring{
-		ResponseTimestamp:  iso8601FromUnixSeconds(ts),
-		MonitoredStopVisit: []MonitoredStopVisit{},
-	}
-	for _, t := range trips {
-		mvj := cc.converter.buildMVJ(t)
-		// For SM: build OnwardCalls starting from selected stop
-		mvj.OnwardCalls = cc.converter.buildOnwardCalls(t, maxOnward, stopID, true)
-		ms := MonitoredStopVisit{
-			RecordedAtTime:          iso8601FromUnixSeconds(cc.converter.GTFSRT.GetTimestampForTrip(t)),
-			MonitoringRef:           applyFieldMutators(stopID, cc.converter.Cfg.Converter.FieldMutators.StopPointRef),
-			MonitoredVehicleJourney: mvj,
-			MonitoredCall:           cc.converter.buildCall(t, stopID),
-		}
-		// Populate MonitoredCall identifiers and name with mutators
-		ms.MonitoredCall.StopPointRef = applyFieldMutators(stopID, cc.converter.Cfg.Converter.FieldMutators.StopPointRef)
-		ms.MonitoredCall.StopPointName = cc.converter.GTFS.GetStopName(stopID)
-		// Fill MonitoredCall timings
-		if eta := cc.converter.GTFSRT.GetExpectedArrivalTimeAtStopForTrip(t, stopID); eta > 0 {
-			ms.MonitoredCall.ExpectedArrivalTime = iso8601FromUnixSeconds(eta)
-		}
-		if etd := cc.converter.GTFSRT.GetExpectedDepartureTimeAtStopForTrip(t, stopID); etd > 0 {
-			ms.MonitoredCall.ExpectedDepartureTime = iso8601FromUnixSeconds(etd)
-		}
-		sm.MonitoredStopVisit = append(sm.MonitoredStopVisit, ms)
-	}
-	sx := cc.converter.BuildSituationExchange()
+	et := cc.converter.BuildEstimatedTimetable()
 	producerRef := cc.converter.Cfg.GTFS.AgencyID
 	if producerRef == "" {
 		producerRef = "UNKNOWN"
 	}
-	return &SiriResponse{Siri: SiriServiceDelivery{ServiceDelivery: VehicleAndSituation{
-		ResponseTimestamp:         iso8601FromUnixSeconds(ts),
-		ProducerRef:               producerRef,
-		VehicleMonitoringDelivery: []VehicleMonitoring{},
-		SituationExchangeDelivery: []SituationExchange{sx},
-		StopMonitoringDelivery:    []StopMonitoring{sm},
-	}}}
-}
 
-func (cc *ConverterCache) GetStopMonitoringResponse(params map[string]string, format string) ([]byte, error) {
-	if params == nil {
-		return nil, errors.New("params required")
-	}
-	stopID := params["monitoringref"]
-	maxOnward := -1
-	if s := params["maximumnumberofcallsonwards"]; s != "" {
-		if v, err := strconv.Atoi(s); err == nil {
-			maxOnward = v
-		}
-	}
-	key := cc.memoKey("sm", format, strings.ToLower(stopID), strconv.Itoa(maxOnward), strings.ToLower(params["lineref"]), strings.ToLower(params["directionref"]), params["maximumstopvisits"], params["minimumstopvisitsperline"])
-	if buf, ok := cc.responseCache[key]; ok {
-		return buf, nil
-	}
-	trips := cc.selectTripsByStop(stopID, params)
-	// Apply maximumStopVisits/minimumStopVisitsPerLine parity behavior using ETA order per route
-	maxSV := -1
-	minPerLine := -1
-	if s := params["maximumstopvisits"]; s != "" {
-		if v, err := strconv.Atoi(s); err == nil {
-			maxSV = v
-		}
-	}
-	if s := params["minimumstopvisitsperline"]; s != "" {
-		if v, err := strconv.Atoi(s); err == nil {
-			minPerLine = v
-		}
-	}
-	if maxSV >= 0 {
-		// Partition trips by route
-		byRoute := map[string][]string{}
-		for _, t := range trips {
-			rid := cc.converter.GTFSRT.GetRouteIDForTrip(t)
-			byRoute[rid] = append(byRoute[rid], t)
-		}
-		// Sort each route's trips by ETA at stopID ascending
-		for rid := range byRoute {
-			sort.Slice(byRoute[rid], func(i, j int) bool {
-				ti := byRoute[rid][i]
-				tj := byRoute[rid][j]
-				ei := cc.converter.GTFSRT.GetExpectedArrivalTimeAtStopForTrip(ti, stopID)
-				ej := cc.converter.GTFSRT.GetExpectedArrivalTimeAtStopForTrip(tj, stopID)
-				if ei == 0 {
-					ei = cc.converter.GTFSRT.GetExpectedDepartureTimeAtStopForTrip(ti, stopID)
-				}
-				if ej == 0 {
-					ej = cc.converter.GTFSRT.GetExpectedDepartureTimeAtStopForTrip(tj, stopID)
-				}
-				return ei < ej
-			})
-		}
-		selected := make([]string, 0, len(trips))
-		// First, take minPerLine from each route
-		if minPerLine > 0 {
-			for _, arr := range byRoute {
-				k := minPerLine
-				if k > len(arr) {
-					k = len(arr)
-				}
-				selected = append(selected, arr[:k]...)
-			}
-		}
-		// If we still have room, fill globally by next earliest ETA
-		if len(selected) < maxSV {
-			type cand struct {
-				t   string
-				eta int64
-			}
-			cands := make([]cand, 0, len(trips))
-			for _, arr := range byRoute {
-				for _, t := range arr {
-					// skip if already selected
-					skip := false
-					for _, s := range selected {
-						if s == t {
-							skip = true
-							break
-						}
-					}
-					if skip {
-						continue
-					}
-					e := cc.converter.GTFSRT.GetExpectedArrivalTimeAtStopForTrip(t, stopID)
-					if e == 0 {
-						e = cc.converter.GTFSRT.GetExpectedDepartureTimeAtStopForTrip(t, stopID)
-					}
-					cands = append(cands, cand{t: t, eta: e})
-				}
-			}
-			sort.Slice(cands, func(i, j int) bool { return cands[i].eta < cands[j].eta })
-			for _, c := range cands {
-				if len(selected) >= maxSV {
-					break
-				}
-				selected = append(selected, c.t)
-			}
-		}
-		// Cap at maxSV if overfull
-		if len(selected) > maxSV {
-			selected = selected[:maxSV]
-		}
-		trips = selected
-	}
-	res := cc.buildSMResponse(stopID, trips, maxOnward)
+	res := &SiriResponse{Siri: SiriServiceDelivery{ServiceDelivery: VehicleAndSituation{
+		ResponseTimestamp:          iso8601FromUnixSeconds(ts),
+		ProducerRef:                producerRef,
+		VehicleMonitoringDelivery:  []VehicleMonitoring{},
+		SituationExchangeDelivery:  []SituationExchange{},
+		EstimatedTimetableDelivery: []EstimatedTimetable{et},
+	}}}
+
 	buf := cc.build(res, format)
 	cc.responseCache[key] = buf
 	return buf, nil

@@ -13,11 +13,11 @@ type SiriServiceDelivery struct {
 }
 
 type VehicleAndSituation struct {
-	ResponseTimestamp         string              `json:"ResponseTimestamp"`
-	ProducerRef               string              `json:"ProducerRef,omitempty"`
-	VehicleMonitoringDelivery []VehicleMonitoring `json:"VehicleMonitoringDelivery"`
-	SituationExchangeDelivery []SituationExchange `json:"SituationExchangeDelivery"`
-	StopMonitoringDelivery    []StopMonitoring    `json:"StopMonitoringDelivery"`
+	ResponseTimestamp          string               `json:"ResponseTimestamp"`
+	ProducerRef                string               `json:"ProducerRef,omitempty"`
+	VehicleMonitoringDelivery  []VehicleMonitoring  `json:"VehicleMonitoringDelivery"`
+	SituationExchangeDelivery  []SituationExchange  `json:"SituationExchangeDelivery"`
+	EstimatedTimetableDelivery []EstimatedTimetable `json:"EstimatedTimetableDelivery"`
 }
 
 type VehicleMonitoring struct {
@@ -31,18 +31,7 @@ type VehicleActivityEntry struct {
 	MonitoredVehicleJourney MonitoredVehicleJourney `json:"MonitoredVehicleJourney"`
 }
 
-// StopMonitoring delivery types
-type StopMonitoring struct {
-	ResponseTimestamp  string               `json:"ResponseTimestamp"`
-	MonitoredStopVisit []MonitoredStopVisit `json:"MonitoredStopVisit"`
-}
-
-type MonitoredStopVisit struct {
-	RecordedAtTime          string                  `json:"RecordedAtTime"`
-	MonitoringRef           string                  `json:"MonitoringRef"`
-	MonitoredVehicleJourney MonitoredVehicleJourney `json:"MonitoredVehicleJourney"`
-	MonitoredCall           SiriCall                `json:"MonitoredCall"`
-}
+// Legacy SM types removed - replaced with ET (Estimated Timetable)
 
 type Converter struct {
 	GTFS   *GTFSIndex

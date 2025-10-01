@@ -27,6 +27,7 @@ type PtSituationElement struct {
 }
 
 type AffectedNetwork struct {
+	NetworkRef    string         `json:"NetworkRef,omitempty"`
 	AffectedLines []AffectedLine `json:"AffectedLines,omitempty"`
 }
 
@@ -109,9 +110,9 @@ func (c *Converter) BuildSituationExchange() SituationExchange {
 			vj := AffectedVehicleJourney{
 				DatedVehicleJourneyRef: TripKeyForConverter(tid, c.Cfg.GTFS.AgencyID, c.GTFSRT.GetStartDateForTrip(tid)),
 			}
-			// LineRef from route (use raw route_id, no agency prefix)
+			// LineRef with codespace prefix
 			if rid := c.GTFSRT.GetRouteIDForTrip(tid); rid != "" {
-				vj.LineRef = rid
+				vj.LineRef = codespace + ":Line:" + rid
 			}
 			if dir := c.GTFSRT.GetRouteDirectionForTrip(tid); dir != "" {
 				vj.DirectionRef = dir
@@ -121,10 +122,12 @@ func (c *Converter) BuildSituationExchange() SituationExchange {
 
 		// Build Networks > AffectedLine for route-level alerts
 		if len(a.RouteIDs) > 0 {
-			network := AffectedNetwork{}
+			network := AffectedNetwork{
+				NetworkRef: codespace + ":Network:" + codespace,
+			}
 			for _, rid := range a.RouteIDs {
 				affectedLine := AffectedLine{
-					LineRef: rid,
+					LineRef: codespace + ":Line:" + rid,
 				}
 				network.AffectedLines = append(network.AffectedLines, affectedLine)
 			}

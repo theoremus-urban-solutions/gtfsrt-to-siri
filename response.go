@@ -35,9 +35,9 @@ func (rb *responseBuilder) BuildXML(res *SiriResponse) []byte {
 	for _, vm := range sd.VehicleMonitoringDelivery {
 		writeVehicleMonitoringXML(&b, vm)
 	}
-	// StopMonitoringDelivery
-	for _, sm := range sd.StopMonitoringDelivery {
-		writeStopMonitoringXML(&b, sm)
+	// EstimatedTimetableDelivery
+	for _, et := range sd.EstimatedTimetableDelivery {
+		writeEstimatedTimetableXML(&b, et)
 	}
 	// SituationExchangeDelivery
 	for _, sx := range sd.SituationExchangeDelivery {
@@ -214,30 +214,197 @@ func writeOnwardCallsXML(b *strings.Builder, oc any) {
 	}
 }
 
-func writeStopMonitoringXML(b *strings.Builder, sm StopMonitoring) {
-	b.WriteString("<StopMonitoringDelivery>")
-	if sm.ResponseTimestamp != "" {
+func writeEstimatedTimetableXML(b *strings.Builder, et EstimatedTimetable) {
+	b.WriteString("<EstimatedTimetableDelivery>")
+	if et.ResponseTimestamp != "" {
 		b.WriteString("<ResponseTimestamp>")
-		b.WriteString(xmlEscape(sm.ResponseTimestamp))
+		b.WriteString(xmlEscape(et.ResponseTimestamp))
 		b.WriteString("</ResponseTimestamp>")
 	}
-	for _, v := range sm.MonitoredStopVisit {
-		b.WriteString("<MonitoredStopVisit>")
-		if v.RecordedAtTime != "" {
+	for _, frame := range et.EstimatedJourneyVersionFrame {
+		b.WriteString("<EstimatedJourneyVersionFrame>")
+		if frame.RecordedAtTime != "" {
 			b.WriteString("<RecordedAtTime>")
-			b.WriteString(xmlEscape(v.RecordedAtTime))
+			b.WriteString(xmlEscape(frame.RecordedAtTime))
 			b.WriteString("</RecordedAtTime>")
 		}
-		if v.MonitoringRef != "" {
-			b.WriteString("<MonitoringRef>")
-			b.WriteString(xmlEscape(v.MonitoringRef))
-			b.WriteString("</MonitoringRef>")
+		for _, journey := range frame.EstimatedVehicleJourney {
+			b.WriteString("<EstimatedVehicleJourney>")
+			if journey.RecordedAtTime != "" {
+				b.WriteString("<RecordedAtTime>")
+				b.WriteString(xmlEscape(journey.RecordedAtTime))
+				b.WriteString("</RecordedAtTime>")
+			}
+			if journey.LineRef != "" {
+				b.WriteString("<LineRef>")
+				b.WriteString(xmlEscape(journey.LineRef))
+				b.WriteString("</LineRef>")
+			}
+			if journey.DirectionRef != "" {
+				b.WriteString("<DirectionRef>")
+				b.WriteString(xmlEscape(journey.DirectionRef))
+				b.WriteString("</DirectionRef>")
+			}
+			// FramedVehicleJourneyRef
+			if journey.FramedVehicleJourneyRef.DatedVehicleJourneyRef != "" {
+				b.WriteString("<FramedVehicleJourneyRef>")
+				if journey.FramedVehicleJourneyRef.DataFrameRef != "" {
+					b.WriteString("<DataFrameRef>")
+					b.WriteString(xmlEscape(journey.FramedVehicleJourneyRef.DataFrameRef))
+					b.WriteString("</DataFrameRef>")
+				}
+				b.WriteString("<DatedVehicleJourneyRef>")
+				b.WriteString(xmlEscape(journey.FramedVehicleJourneyRef.DatedVehicleJourneyRef))
+				b.WriteString("</DatedVehicleJourneyRef>")
+				b.WriteString("</FramedVehicleJourneyRef>")
+			}
+			if journey.VehicleMode != "" {
+				b.WriteString("<VehicleMode>")
+				b.WriteString(xmlEscape(journey.VehicleMode))
+				b.WriteString("</VehicleMode>")
+			}
+			if journey.OriginName != "" {
+				b.WriteString("<OriginName>")
+				b.WriteString(xmlEscape(journey.OriginName))
+				b.WriteString("</OriginName>")
+			}
+			if journey.DestinationName != "" {
+				b.WriteString("<DestinationName>")
+				b.WriteString(xmlEscape(journey.DestinationName))
+				b.WriteString("</DestinationName>")
+			}
+			if journey.OperatorRef != "" {
+				b.WriteString("<OperatorRef>")
+				b.WriteString(xmlEscape(journey.OperatorRef))
+				b.WriteString("</OperatorRef>")
+			}
+			b.WriteString("<Monitored>")
+			if journey.Monitored {
+				b.WriteString("true")
+			} else {
+				b.WriteString("false")
+			}
+			b.WriteString("</Monitored>")
+			if journey.DataSource != "" {
+				b.WriteString("<DataSource>")
+				b.WriteString(xmlEscape(journey.DataSource))
+				b.WriteString("</DataSource>")
+			}
+			if journey.VehicleRef != "" {
+				b.WriteString("<VehicleRef>")
+				b.WriteString(xmlEscape(journey.VehicleRef))
+				b.WriteString("</VehicleRef>")
+			}
+			// RecordedCalls
+			if len(journey.RecordedCalls) > 0 {
+				b.WriteString("<RecordedCalls>")
+				for _, call := range journey.RecordedCalls {
+					b.WriteString("<RecordedCall>")
+					if call.StopPointRef != "" {
+						b.WriteString("<StopPointRef>")
+						b.WriteString(xmlEscape(call.StopPointRef))
+						b.WriteString("</StopPointRef>")
+					}
+					if call.Order > 0 {
+						b.WriteString("<Order>")
+						b.WriteString(strconv.Itoa(call.Order))
+						b.WriteString("</Order>")
+					}
+					if call.StopPointName != "" {
+						b.WriteString("<StopPointName>")
+						b.WriteString(xmlEscape(call.StopPointName))
+						b.WriteString("</StopPointName>")
+					}
+					if call.AimedArrivalTime != "" {
+						b.WriteString("<AimedArrivalTime>")
+						b.WriteString(xmlEscape(call.AimedArrivalTime))
+						b.WriteString("</AimedArrivalTime>")
+					}
+					if call.ActualArrivalTime != "" {
+						b.WriteString("<ActualArrivalTime>")
+						b.WriteString(xmlEscape(call.ActualArrivalTime))
+						b.WriteString("</ActualArrivalTime>")
+					}
+					if call.AimedDepartureTime != "" {
+						b.WriteString("<AimedDepartureTime>")
+						b.WriteString(xmlEscape(call.AimedDepartureTime))
+						b.WriteString("</AimedDepartureTime>")
+					}
+					if call.ActualDepartureTime != "" {
+						b.WriteString("<ActualDepartureTime>")
+						b.WriteString(xmlEscape(call.ActualDepartureTime))
+						b.WriteString("</ActualDepartureTime>")
+					}
+					b.WriteString("</RecordedCall>")
+				}
+				b.WriteString("</RecordedCalls>")
+			}
+			// EstimatedCalls
+			if len(journey.EstimatedCalls) > 0 {
+				b.WriteString("<EstimatedCalls>")
+				for _, call := range journey.EstimatedCalls {
+					b.WriteString("<EstimatedCall>")
+					if call.StopPointRef != "" {
+						b.WriteString("<StopPointRef>")
+						b.WriteString(xmlEscape(call.StopPointRef))
+						b.WriteString("</StopPointRef>")
+					}
+					if call.Order > 0 {
+						b.WriteString("<Order>")
+						b.WriteString(strconv.Itoa(call.Order))
+						b.WriteString("</Order>")
+					}
+					if call.StopPointName != "" {
+						b.WriteString("<StopPointName>")
+						b.WriteString(xmlEscape(call.StopPointName))
+						b.WriteString("</StopPointName>")
+					}
+					if call.AimedArrivalTime != "" {
+						b.WriteString("<AimedArrivalTime>")
+						b.WriteString(xmlEscape(call.AimedArrivalTime))
+						b.WriteString("</AimedArrivalTime>")
+					}
+					if call.ExpectedArrivalTime != "" {
+						b.WriteString("<ExpectedArrivalTime>")
+						b.WriteString(xmlEscape(call.ExpectedArrivalTime))
+						b.WriteString("</ExpectedArrivalTime>")
+					}
+					if call.ArrivalStatus != "" {
+						b.WriteString("<ArrivalStatus>")
+						b.WriteString(xmlEscape(call.ArrivalStatus))
+						b.WriteString("</ArrivalStatus>")
+					}
+					if call.AimedDepartureTime != "" {
+						b.WriteString("<AimedDepartureTime>")
+						b.WriteString(xmlEscape(call.AimedDepartureTime))
+						b.WriteString("</AimedDepartureTime>")
+					}
+					if call.ExpectedDepartureTime != "" {
+						b.WriteString("<ExpectedDepartureTime>")
+						b.WriteString(xmlEscape(call.ExpectedDepartureTime))
+						b.WriteString("</ExpectedDepartureTime>")
+					}
+					if call.DepartureStatus != "" {
+						b.WriteString("<DepartureStatus>")
+						b.WriteString(xmlEscape(call.DepartureStatus))
+						b.WriteString("</DepartureStatus>")
+					}
+					b.WriteString("</EstimatedCall>")
+				}
+				b.WriteString("</EstimatedCalls>")
+			}
+			b.WriteString("<IsCompleteStopSequence>")
+			if journey.IsCompleteStopSequence {
+				b.WriteString("true")
+			} else {
+				b.WriteString("false")
+			}
+			b.WriteString("</IsCompleteStopSequence>")
+			b.WriteString("</EstimatedVehicleJourney>")
 		}
-		writeMVJXML(b, v.MonitoredVehicleJourney)
-		writeCallXML(b, "MonitoredCall", v.MonitoredCall)
-		b.WriteString("</MonitoredStopVisit>")
+		b.WriteString("</EstimatedJourneyVersionFrame>")
 	}
-	b.WriteString("</StopMonitoringDelivery>")
+	b.WriteString("</EstimatedTimetableDelivery>")
 }
 
 func writeCallXML(b *strings.Builder, tag string, c SiriCall) {
@@ -366,6 +533,11 @@ func writeSituationExchangeXML(b *strings.Builder, sx SituationExchange) {
 			b.WriteString("<Networks>")
 			for _, network := range el.Affects.Networks {
 				b.WriteString("<AffectedNetwork>")
+				if network.NetworkRef != "" {
+					b.WriteString("<NetworkRef>")
+					b.WriteString(xmlEscape(network.NetworkRef))
+					b.WriteString("</NetworkRef>")
+				}
 				for _, line := range network.AffectedLines {
 					b.WriteString("<AffectedLine>")
 					if line.LineRef != "" {
