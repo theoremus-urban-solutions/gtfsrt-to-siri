@@ -117,6 +117,10 @@ func (w *GTFSRTWrapper) Refresh() error {
 					if e.TripUpdate.Trip.StartDate != nil {
 						w.tripDate[tripID] = *e.TripUpdate.Trip.StartDate
 					}
+					// Extract vehicle ID from TripUpdate if present
+					if e.TripUpdate.Vehicle != nil && e.TripUpdate.Vehicle.Id != nil {
+						w.tripVehicleRef[tripID] = *e.TripUpdate.Vehicle.Id
+					}
 					if len(e.TripUpdate.StopTimeUpdate) > 0 {
 						w.onwardStops[tripID] = make([]string, 0, len(e.TripUpdate.StopTimeUpdate))
 						w.etaByStop[tripID] = map[string]int64{}
@@ -155,8 +159,11 @@ func (w *GTFSRTWrapper) Refresh() error {
 					if tripID != "" {
 						w.trips[tripID] = struct{}{}
 					}
+					// Only set VehicleRef from vehicle-positions if not already set from trip-updates
 					if e.Vehicle.Vehicle != nil && e.Vehicle.Vehicle.Id != nil && tripID != "" {
-						w.tripVehicleRef[tripID] = *e.Vehicle.Vehicle.Id
+						if _, exists := w.tripVehicleRef[tripID]; !exists {
+							w.tripVehicleRef[tripID] = *e.Vehicle.Vehicle.Id
+						}
 					}
 					if e.Vehicle.Position != nil && tripID != "" {
 						if e.Vehicle.Position.Latitude != nil {
