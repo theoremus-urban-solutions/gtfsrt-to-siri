@@ -1,6 +1,7 @@
 # GTFS-Realtime to SIRI Converter
 
 Convert GTFS-Realtime feeds (Trip Updates, Vehicle Positions, Service Alerts) to SIRI format (VM, ET, SX).
+Config is loaded by default with Sofia's GTFS feed.
 
 **Features:**
 - **On-demand conversion** – No caching layer; designed for integration into larger systems
@@ -173,7 +174,6 @@ converter:
 
 ## References
 
-- [SIRI Specification](http://www.siri.org.uk/)
 - [Nordic SIRI Profile](https://enturas.atlassian.net/wiki/spaces/PUBLIC/pages/637370373/)
 - [GTFS-Realtime Specification](https://gtfs.org/realtime/)
 
