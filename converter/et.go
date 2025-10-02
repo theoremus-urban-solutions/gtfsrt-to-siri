@@ -1,71 +1,16 @@
-package gtfsrtsiri
+package converter
 
 import (
 	"fmt"
 	"time"
+
+	"mta/gtfsrt-to-siri/gtfsrt"
+	"mta/gtfsrt-to-siri/internal"
+	"mta/gtfsrt-to-siri/siri"
 )
 
-// EstimatedTimetable delivery types
-type EstimatedTimetable struct {
-	ResponseTimestamp            string                         `json:"ResponseTimestamp"`
-	EstimatedJourneyVersionFrame []EstimatedJourneyVersionFrame `json:"EstimatedJourneyVersionFrame"`
-}
-
-type EstimatedJourneyVersionFrame struct {
-	RecordedAtTime          string                    `json:"RecordedAtTime"`
-	EstimatedVehicleJourney []EstimatedVehicleJourney `json:"EstimatedVehicleJourney"`
-}
-
-type EstimatedVehicleJourney struct {
-	RecordedAtTime          string                  `json:"RecordedAtTime"`
-	LineRef                 string                  `json:"LineRef"`
-	VehicleRef              string                  `json:"VehicleRef,omitempty"`
-	DirectionRef            string                  `json:"DirectionRef"`
-	FramedVehicleJourneyRef FramedVehicleJourneyRef `json:"FramedVehicleJourneyRef"`
-	VehicleMode             string                  `json:"VehicleMode,omitempty"`
-	OriginName              string                  `json:"OriginName,omitempty"`
-	DestinationName         string                  `json:"DestinationName,omitempty"`
-	Monitored               bool                    `json:"Monitored"`
-	DataSource              string                  `json:"DataSource,omitempty"`
-	OperatorRef             string                  `json:"OperatorRef,omitempty"`
-	RecordedCalls           []RecordedCall          `json:"RecordedCalls,omitempty"`
-	EstimatedCalls          []EstimatedCall         `json:"EstimatedCalls,omitempty"`
-	IsCompleteStopSequence  bool                    `json:"IsCompleteStopSequence"`
-}
-
-type FramedVehicleJourneyRef struct {
-	DataFrameRef           string `json:"DataFrameRef"`
-	DatedVehicleJourneyRef string `json:"DatedVehicleJourneyRef"`
-}
-
-type RecordedCall struct {
-	StopPointRef        string `json:"StopPointRef" xml:"StopPointRef"`
-	Order               int    `json:"Order" xml:"Order"`
-	StopPointName       string `json:"StopPointName,omitempty" xml:"StopPointName,omitempty"`
-	Cancellation        bool   `json:"Cancellation,omitempty" xml:"Cancellation"`
-	RequestStop         bool   `json:"RequestStop,omitempty" xml:"RequestStop"`
-	AimedArrivalTime    string `json:"AimedArrivalTime,omitempty" xml:"AimedArrivalTime,omitempty"`
-	ActualArrivalTime   string `json:"ActualArrivalTime,omitempty" xml:"ActualArrivalTime,omitempty"`
-	AimedDepartureTime  string `json:"AimedDepartureTime,omitempty" xml:"AimedDepartureTime,omitempty"`
-	ActualDepartureTime string `json:"ActualDepartureTime,omitempty" xml:"ActualDepartureTime,omitempty"`
-}
-
-type EstimatedCall struct {
-	StopPointRef          string `json:"StopPointRef" xml:"StopPointRef"`
-	Order                 int    `json:"Order" xml:"Order"`
-	StopPointName         string `json:"StopPointName,omitempty" xml:"StopPointName,omitempty"`
-	Cancellation          bool   `json:"Cancellation,omitempty" xml:"Cancellation"`
-	RequestStop           bool   `json:"RequestStop,omitempty" xml:"RequestStop"`
-	AimedArrivalTime      string `json:"AimedArrivalTime,omitempty" xml:"AimedArrivalTime,omitempty"`
-	ExpectedArrivalTime   string `json:"ExpectedArrivalTime,omitempty" xml:"ExpectedArrivalTime,omitempty"`
-	AimedDepartureTime    string `json:"AimedDepartureTime,omitempty" xml:"AimedDepartureTime,omitempty"`
-	ExpectedDepartureTime string `json:"ExpectedDepartureTime,omitempty" xml:"ExpectedDepartureTime,omitempty"`
-	ArrivalStatus         string `json:"ArrivalStatus,omitempty" xml:"ArrivalStatus,omitempty"`
-	DepartureStatus       string `json:"DepartureStatus,omitempty" xml:"DepartureStatus,omitempty"`
-}
-
 // BuildEstimatedTimetable converts GTFS-RT data to SIRI ET format
-func (c *Converter) BuildEstimatedTimetable() EstimatedTimetable {
+func (c *Converter) BuildEstimatedTimetable() siri.EstimatedTimetable {
 	timestamp := c.GTFSRT.GetTimestampForFeedMessage()
 	now := timestamp
 	agencyID := c.Cfg.GTFS.AgencyID
@@ -74,11 +19,8 @@ func (c *Converter) BuildEstimatedTimetable() EstimatedTimetable {
 	}
 
 	// Get all active trips from GTFS-RT
-	allTrips := []string{}
-	for tripID := range c.GTFSRT.trips {
-		allTrips = append(allTrips, tripID)
-	}
-	journeys := make([]EstimatedVehicleJourney, 0, len(allTrips))
+	allTrips := c.GTFSRT.GetAllMonitoredTrips()
+	journeys := make([]siri.EstimatedVehicleJourney, 0, len(allTrips))
 
 	for _, tripID := range allTrips {
 		journey := c.buildEstimatedVehicleJourney(tripID, now, agencyID)
@@ -87,18 +29,18 @@ func (c *Converter) BuildEstimatedTimetable() EstimatedTimetable {
 		}
 	}
 
-	frame := EstimatedJourneyVersionFrame{
-		RecordedAtTime:          iso8601ExtendedFromUnixSeconds(timestamp),
+	frame := siri.EstimatedJourneyVersionFrame{
+		RecordedAtTime:          internal.Iso8601ExtendedFromUnixSeconds(timestamp),
 		EstimatedVehicleJourney: journeys,
 	}
 
-	return EstimatedTimetable{
-		ResponseTimestamp:            iso8601ExtendedFromUnixSeconds(timestamp),
-		EstimatedJourneyVersionFrame: []EstimatedJourneyVersionFrame{frame},
+	return siri.EstimatedTimetable{
+		ResponseTimestamp:            internal.Iso8601ExtendedFromUnixSeconds(timestamp),
+		EstimatedJourneyVersionFrame: []siri.EstimatedJourneyVersionFrame{frame},
 	}
 }
 
-func (c *Converter) buildEstimatedVehicleJourney(tripID string, now int64, agencyID string) *EstimatedVehicleJourney {
+func (c *Converter) buildEstimatedVehicleJourney(tripID string, now int64, agencyID string) *siri.EstimatedVehicleJourney {
 	// Get route and direction
 	routeID := c.GTFSRT.GetRouteIDForTrip(tripID)
 	if routeID == "" {
@@ -112,12 +54,12 @@ func (c *Converter) buildEstimatedVehicleJourney(tripID string, now int64, agenc
 
 	// Get trip key
 	startDate := c.GTFSRT.GetStartDateForTrip(tripID)
-	tripKey := TripKeyForConverter(tripID, agencyID, startDate)
+	tripKey := gtfsrt.TripKeyForConverter(tripID, agencyID, startDate)
 
-	// Build FramedVehicleJourneyRef
+	// Build siri.FramedVehicleJourneyRef
 	dataFrameRef := startDate
 	if dataFrameRef == "" {
-		dataFrameRef = iso8601DateFromUnixSeconds(now)
+		dataFrameRef = internal.Iso8601DateFromUnixSeconds(now)
 	}
 	datedVehicleJourneyRef := agencyID + ":ServiceJourney:" + tripID
 
@@ -130,18 +72,18 @@ func (c *Converter) buildEstimatedVehicleJourney(tripID string, now int64, agenc
 	// Get complete stop sequence from GTFS static
 	// Determine which key to use for static GTFS lookups
 	gtfsLookupKey := tripKey
-	stopSequence := c.GTFS.tripStopSeq[gtfsLookupKey]
+	stopSequence := c.GTFS.TripStopSeq[gtfsLookupKey]
 	if len(stopSequence) == 0 {
 		// Try with just trip_id if agency-prefixed key doesn't work
 		gtfsLookupKey = tripID
-		stopSequence = c.GTFS.tripStopSeq[gtfsLookupKey]
+		stopSequence = c.GTFS.TripStopSeq[gtfsLookupKey]
 	}
 
 	if len(stopSequence) == 0 {
 		return nil
 	}
 
-	// Split into RecordedCalls and EstimatedCalls
+	// Split into siri.RecordedCalls and siri.EstimatedCalls
 	recordedCalls, estimatedCalls := c.buildCallSequence(tripID, gtfsLookupKey, stopSequence, now)
 
 	// Get VehicleMode from route_type
@@ -167,12 +109,12 @@ func (c *Converter) buildEstimatedVehicleJourney(tripID string, now int64, agenc
 	// Monitored: true if trip is currently ongoing (has both past and future stops)
 	monitored := len(recordedCalls) > 0 && len(estimatedCalls) > 0
 
-	journey := &EstimatedVehicleJourney{
-		RecordedAtTime: iso8601ExtendedFromUnixSeconds(now),
+	journey := &siri.EstimatedVehicleJourney{
+		RecordedAtTime: internal.Iso8601ExtendedFromUnixSeconds(now),
 		LineRef:        agencyID + ":Line:" + routeID,
 		VehicleRef:     vehicleRef,
 		DirectionRef:   directionID,
-		FramedVehicleJourneyRef: FramedVehicleJourneyRef{
+		FramedVehicleJourneyRef: siri.FramedVehicleJourneyRef{
 			DataFrameRef:           dataFrameRef,
 			DatedVehicleJourneyRef: datedVehicleJourneyRef,
 		},
@@ -190,9 +132,9 @@ func (c *Converter) buildEstimatedVehicleJourney(tripID string, now int64, agenc
 	return journey
 }
 
-func (c *Converter) buildCallSequence(tripID, gtfsLookupKey string, stopSequence []string, now int64) ([]RecordedCall, []EstimatedCall) {
-	recordedCalls := []RecordedCall{}
-	estimatedCalls := []EstimatedCall{}
+func (c *Converter) buildCallSequence(tripID, gtfsLookupKey string, stopSequence []string, now int64) ([]siri.RecordedCall, []siri.EstimatedCall) {
+	recordedCalls := []siri.RecordedCall{}
+	estimatedCalls := []siri.EstimatedCall{}
 	agencyID := c.Cfg.GTFS.AgencyID
 	if agencyID == "" {
 		agencyID = "UNKNOWN"
@@ -238,8 +180,8 @@ func (c *Converter) buildCallSequence(tripID, gtfsLookupKey string, stopSequence
 		isRequestStop := pickupType == 2 || pickupType == 3 || dropOffType == 2 || dropOffType == 3
 
 		if isPastStop {
-			// RecordedCall
-			call := RecordedCall{
+			// siri.RecordedCall
+			call := siri.RecordedCall{
 				StopPointRef:  stopPointRef,
 				Order:         order + 1,
 				StopPointName: stopName,
@@ -249,24 +191,24 @@ func (c *Converter) buildCallSequence(tripID, gtfsLookupKey string, stopSequence
 
 			// Set aimed times from static GTFS
 			if staticArrival > 0 {
-				call.AimedArrivalTime = iso8601ExtendedFromUnixSeconds(staticArrival)
+				call.AimedArrivalTime = internal.Iso8601ExtendedFromUnixSeconds(staticArrival)
 			}
 			if staticDeparture > 0 {
-				call.AimedDepartureTime = iso8601ExtendedFromUnixSeconds(staticDeparture)
+				call.AimedDepartureTime = internal.Iso8601ExtendedFromUnixSeconds(staticDeparture)
 			}
 
 			// Set actual times from GTFS-RT
 			if rtArrival > 0 {
-				call.ActualArrivalTime = iso8601ExtendedFromUnixSeconds(rtArrival)
+				call.ActualArrivalTime = internal.Iso8601ExtendedFromUnixSeconds(rtArrival)
 			}
 			if rtDeparture > 0 {
-				call.ActualDepartureTime = iso8601ExtendedFromUnixSeconds(rtDeparture)
+				call.ActualDepartureTime = internal.Iso8601ExtendedFromUnixSeconds(rtDeparture)
 			}
 
 			recordedCalls = append(recordedCalls, call)
 		} else {
-			// EstimatedCall
-			call := EstimatedCall{
+			// siri.EstimatedCall
+			call := siri.EstimatedCall{
 				StopPointRef:  stopPointRef,
 				Order:         order + 1,
 				StopPointName: stopName,
@@ -276,27 +218,31 @@ func (c *Converter) buildCallSequence(tripID, gtfsLookupKey string, stopSequence
 
 			// Set aimed times from static GTFS
 			if staticArrival > 0 {
-				call.AimedArrivalTime = iso8601ExtendedFromUnixSeconds(staticArrival)
+				call.AimedArrivalTime = internal.Iso8601ExtendedFromUnixSeconds(staticArrival)
 			}
 			if staticDeparture > 0 {
-				call.AimedDepartureTime = iso8601ExtendedFromUnixSeconds(staticDeparture)
+				call.AimedDepartureTime = internal.Iso8601ExtendedFromUnixSeconds(staticDeparture)
 			}
 
-			// Set expected times from GTFS-RT and calculate status
-			if rtArrival > 0 {
-				call.ExpectedArrivalTime = iso8601ExtendedFromUnixSeconds(rtArrival)
-				if staticArrival > 0 {
+			// Set expected times and status - use RT if available, otherwise fall back to static
+			if staticArrival > 0 {
+				if rtArrival > 0 {
+					call.ExpectedArrivalTime = internal.Iso8601ExtendedFromUnixSeconds(rtArrival)
 					call.ArrivalStatus = calculateStatus(rtArrival, staticArrival)
 				} else {
-					call.ArrivalStatus = "onTime" // Default if no static time
+					// No real-time data, use static time
+					call.ExpectedArrivalTime = internal.Iso8601ExtendedFromUnixSeconds(staticArrival)
+					call.ArrivalStatus = "onTime"
 				}
 			}
-			if rtDeparture > 0 {
-				call.ExpectedDepartureTime = iso8601ExtendedFromUnixSeconds(rtDeparture)
-				if staticDeparture > 0 {
+			if staticDeparture > 0 {
+				if rtDeparture > 0 {
+					call.ExpectedDepartureTime = internal.Iso8601ExtendedFromUnixSeconds(rtDeparture)
 					call.DepartureStatus = calculateStatus(rtDeparture, staticDeparture)
 				} else {
-					call.DepartureStatus = "onTime" // Default if no static time
+					// No real-time data, use static time
+					call.ExpectedDepartureTime = internal.Iso8601ExtendedFromUnixSeconds(staticDeparture)
+					call.DepartureStatus = "onTime"
 				}
 			}
 

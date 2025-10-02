@@ -1,64 +1,14 @@
-package gtfsrtsiri
+package converter
 
-type SituationExchange struct {
-	Situations any `json:"Situations"`
-}
+import (
+	"mta/gtfsrt-to-siri/gtfsrt"
+	"mta/gtfsrt-to-siri/internal"
+	"mta/gtfsrt-to-siri/siri"
+)
 
-// SX structures (minimal subset)
-type PtSituationElement struct {
-	ParticipantRef    string `json:"ParticipantRef,omitempty"`
-	SituationNumber   string `json:"SituationNumber"`
-	SourceType        string `json:"SourceType,omitempty"`
-	Progress          string `json:"Progress,omitempty"`
-	PublicationWindow struct {
-		StartTime string `json:"StartTime"`
-		EndTime   string `json:"EndTime"`
-	} `json:"PublicationWindow"`
-	Severity    string `json:"Severity"`
-	ReportType  string `json:"ReportType,omitempty"`
-	Summary     string `json:"Summary"`
-	Description string `json:"Description"`
-	Affects     struct {
-		Networks        []AffectedNetwork        `json:"Networks,omitempty"`
-		VehicleJourneys []AffectedVehicleJourney `json:"VehicleJourneys,omitempty"`
-		StopPoints      []AffectedStopPoint      `json:"StopPoints,omitempty"`
-	} `json:"Affects"`
-	Consequences []Consequence `json:"Consequences,omitempty"`
-}
-
-type AffectedNetwork struct {
-	NetworkRef    string         `json:"NetworkRef,omitempty"`
-	AffectedLines []AffectedLine `json:"AffectedLines,omitempty"`
-}
-
-type AffectedLine struct {
-	LineRef        string          `json:"LineRef"`
-	AffectedRoutes []AffectedRoute `json:"AffectedRoutes,omitempty"`
-}
-
-type AffectedRoute struct {
-	DirectionRef string              `json:"DirectionRef,omitempty"`
-	StopPoints   []AffectedStopPoint `json:"StopPoints,omitempty"`
-}
-
-type AffectedVehicleJourney struct {
-	DatedVehicleJourneyRef string `json:"DatedVehicleJourneyRef"`
-	LineRef                string `json:"LineRef,omitempty"`
-	DirectionRef           string `json:"DirectionRef,omitempty"`
-}
-
-type AffectedStopPoint struct {
-	StopPointRef string `json:"StopPointRef"`
-}
-
-type Consequence struct {
-	Condition string `json:"Condition"`
-}
-
-// BuildSituationExchange converts parsed GTFS-RT alerts to a simple SX delivery
-func (c *Converter) BuildSituationExchange() SituationExchange {
+func (c *Converter) BuildSituationExchange() siri.SituationExchange {
 	alerts := c.GTFSRT.GetAlerts()
-	elements := make([]PtSituationElement, 0, len(alerts))
+	elements := make([]siri.PtSituationElement, 0, len(alerts))
 	now := c.GTFSRT.GetTimestampForFeedMessage()
 	for _, a := range alerts {
 		severity, effectPrefix := mapGTFSRTEffectToSIRISeverity(a.Effect)
@@ -73,7 +23,7 @@ func (c *Converter) BuildSituationExchange() SituationExchange {
 		}
 		situationNumber := codespace + ":SituationNumber:" + a.ID
 
-		el := PtSituationElement{
+		el := siri.PtSituationElement{
 			ParticipantRef:  codespace,
 			SituationNumber: situationNumber,
 			SourceType:      "directReport",
@@ -83,10 +33,10 @@ func (c *Converter) BuildSituationExchange() SituationExchange {
 			Description:     description,
 		}
 		if a.Start > 0 {
-			el.PublicationWindow.StartTime = iso8601FromUnixSeconds(a.Start)
+			el.PublicationWindow.StartTime = internal.Iso8601FromUnixSeconds(a.Start)
 		}
 		if a.End > 0 {
-			el.PublicationWindow.EndTime = iso8601FromUnixSeconds(a.End)
+			el.PublicationWindow.EndTime = internal.Iso8601FromUnixSeconds(a.End)
 		}
 		// Set Progress based on validity period
 		if a.End > 0 && a.End < now {
@@ -96,7 +46,7 @@ func (c *Converter) BuildSituationExchange() SituationExchange {
 		}
 		// Build Affects structure based on GTFS-RT informed_entity
 		// According to affects.md mapping:
-		// - Route-only alerts -> Networks > AffectedLine
+		// - Route-only alerts -> Networks > siri.AffectedLine
 		// - Trip alerts -> VehicleJourneys
 		// - Stop-only alerts -> StopPoints at Affects level
 
@@ -107,8 +57,8 @@ func (c *Converter) BuildSituationExchange() SituationExchange {
 				continue
 			}
 			seenTrips[tid] = true
-			vj := AffectedVehicleJourney{
-				DatedVehicleJourneyRef: TripKeyForConverter(tid, c.Cfg.GTFS.AgencyID, c.GTFSRT.GetStartDateForTrip(tid)),
+			vj := siri.AffectedVehicleJourney{
+				DatedVehicleJourneyRef: gtfsrt.TripKeyForConverter(tid, c.Cfg.GTFS.AgencyID, c.GTFSRT.GetStartDateForTrip(tid)),
 			}
 			// LineRef with codespace prefix
 			if rid := c.GTFSRT.GetRouteIDForTrip(tid); rid != "" {
@@ -120,13 +70,13 @@ func (c *Converter) BuildSituationExchange() SituationExchange {
 			el.Affects.VehicleJourneys = append(el.Affects.VehicleJourneys, vj)
 		}
 
-		// Build Networks > AffectedLine for route-level alerts
+		// Build Networks > siri.AffectedLine for route-level alerts
 		if len(a.RouteIDs) > 0 {
-			network := AffectedNetwork{
+			network := siri.AffectedNetwork{
 				NetworkRef: codespace + ":Network:" + codespace,
 			}
 			for _, rid := range a.RouteIDs {
-				affectedLine := AffectedLine{
+				affectedLine := siri.AffectedLine{
 					LineRef: codespace + ":Line:" + rid,
 				}
 				network.AffectedLines = append(network.AffectedLines, affectedLine)
@@ -136,17 +86,17 @@ func (c *Converter) BuildSituationExchange() SituationExchange {
 
 		// Build StopPoints for stop-only alerts (at Affects level)
 		for _, sid := range a.StopIDs {
-			el.Affects.StopPoints = append(el.Affects.StopPoints, AffectedStopPoint{
+			el.Affects.StopPoints = append(el.Affects.StopPoints, siri.AffectedStopPoint{
 				StopPointRef: applyFieldMutators(sid, c.Cfg.Converter.FieldMutators.StopPointRef),
 			})
 		}
-		// Add Consequences derived from GTFS-RT Effect
+		// Add siri.Consequences derived from GTFS-RT Effect
 		if cond := effectToCondition(a.Effect); cond != "" {
-			el.Consequences = []Consequence{{Condition: cond}}
+			el.Consequences = []siri.Consequence{{Condition: cond}}
 		}
 		elements = append(elements, el)
 	}
-	return SituationExchange{Situations: elements}
+	return siri.SituationExchange{Situations: elements}
 }
 
 // mapGTFSRTEffectToSIRISeverity maps GTFS-RT Effect to SIRI Severity
@@ -222,7 +172,7 @@ func mapGTFSRTCauseToReportType(gtfsrtCause string) string {
 	}
 }
 
-// Map GTFS-RT Effect → SIRI Consequence Condition (minimal set)
+// Map GTFS-RT Effect → SIRI siri.Consequence Condition (minimal set)
 func effectToCondition(gtfsrtEffect string) string {
 	switch gtfsrtEffect {
 	case "NO_SERVICE":

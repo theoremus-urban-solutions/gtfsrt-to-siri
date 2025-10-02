@@ -1,16 +1,12 @@
-package gtfsrtsiri
+package gtfsrt
 
 import (
-	"context"
-	"errors"
-	"io"
-	"net/http"
 	"time"
 
-	gtfsrtpb "github.com/MobilityData/gtfs-realtime-bindings/golang/gtfs"
-	"google.golang.org/protobuf/proto"
+	"mta/gtfsrt-to-siri/config"
 )
 
+// GTFSRTWrapper stores GTFS-Realtime data in memory for fast lookups
 type GTFSRTWrapper struct {
 	tripUpdatesURL      string
 	vehiclePositionsURL string
@@ -40,21 +36,7 @@ type GTFSRTWrapper struct {
 	alertsByTrip  map[string][]int // trip_id -> indices
 }
 
-// RTAlert is a simplified representation of a GTFS-RT Alert for SX building
-type RTAlert struct {
-	ID          string
-	Header      string
-	Description string
-	Cause       string
-	Effect      string
-	Severity    string
-	Start       int64
-	End         int64
-	RouteIDs    []string
-	StopIDs     []string
-	TripIDs     []string
-}
-
+// NewGTFSRTWrapper creates a new wrapper for GTFS-RT feeds
 func NewGTFSRTWrapper(tripUpdatesURL, vehiclePositionsURL, serviceAlertsURL string) *GTFSRTWrapper {
 	return &GTFSRTWrapper{
 		tripUpdatesURL:      tripUpdatesURL,
@@ -81,6 +63,7 @@ func NewGTFSRTWrapper(tripUpdatesURL, vehiclePositionsURL, serviceAlertsURL stri
 	}
 }
 
+// Refresh fetches and parses all GTFS-RT feeds
 func (w *GTFSRTWrapper) Refresh() error {
 	w.trips = map[string]struct{}{}
 	w.vehicleTS = map[string]int64{}
@@ -270,43 +253,7 @@ func (w *GTFSRTWrapper) Refresh() error {
 	return nil
 }
 
-func fetchFeed(url string) (*gtfsrtpb.FeedMessage, error) {
-	// basic retry with backoff and context timeout
-	var lastErr error
-	timeout := 5 * time.Second
-	attempts := 3
-	for i := 0; i < attempts; i++ {
-		ctx, cancel := context.WithTimeout(context.Background(), timeout)
-		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-		// optional headers could be injected here (API keys, etc.)
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			lastErr = err
-			cancel()
-			time.Sleep(time.Duration(i+1) * 250 * time.Millisecond)
-			continue
-		}
-		b, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		cancel()
-		if err != nil {
-			lastErr = err
-			time.Sleep(time.Duration(i+1) * 250 * time.Millisecond)
-			continue
-		}
-		var fm gtfsrtpb.FeedMessage
-		if err := proto.Unmarshal(b, &fm); err != nil {
-			lastErr = err
-			time.Sleep(time.Duration(i+1) * 250 * time.Millisecond)
-			continue
-		}
-		return &fm, nil
-	}
-	if lastErr == nil {
-		lastErr = errors.New("failed to fetch feed")
-	}
-	return nil, lastErr
-}
+// Accessor methods
 
 func (w *GTFSRTWrapper) GetAllMonitoredTrips() []string {
 	ids := make([]string, 0, len(w.trips))
@@ -320,7 +267,7 @@ func (w *GTFSRTWrapper) GetGTFSTripKeyForRealtimeTripKey(tripID string) string {
 
 // TripKeyForConverter returns tripKey according to Config.Converter.TripKeyStrategy
 func TripKeyForConverter(tripID, agency, startDate string) string {
-	s := Config.Converter.TripKeyStrategy
+	s := config.Config.Converter.TripKeyStrategy
 	switch s {
 	case "startDateTrip":
 		if startDate != "" {
@@ -346,18 +293,21 @@ func TripKeyForConverter(tripID, agency, startDate string) string {
 func (w *GTFSRTWrapper) GetRouteIDForTrip(tripID string) string         { return w.tripRoute[tripID] }
 func (w *GTFSRTWrapper) GetRouteDirectionForTrip(tripID string) string  { return w.tripDir[tripID] }
 func (w *GTFSRTWrapper) GetOnwardStopIDsForTrip(tripID string) []string { return w.onwardStops[tripID] }
+
 func (w *GTFSRTWrapper) GetExpectedArrivalTimeAtStopForTrip(tripID, stopID string) int64 {
 	if m := w.etaByStop[tripID]; m != nil {
 		return m[stopID]
 	}
 	return 0
 }
+
 func (w *GTFSRTWrapper) GetExpectedDepartureTimeAtStopForTrip(tripID, stopID string) int64 {
 	if m := w.etdByStop[tripID]; m != nil {
 		return m[stopID]
 	}
 	return 0
 }
+
 func (w *GTFSRTWrapper) GetIndexOfStopInStopTimeUpdatesForTrip(tripID, stopID string) int {
 	for i, sid := range w.onwardStops[tripID] {
 		if sid == stopID {
@@ -366,29 +316,36 @@ func (w *GTFSRTWrapper) GetIndexOfStopInStopTimeUpdatesForTrip(tripID, stopID st
 	}
 	return -1
 }
+
 func (w *GTFSRTWrapper) GetStartDateForTrip(tripID string) string  { return w.tripDate[tripID] }
 func (w *GTFSRTWrapper) GetOriginTimeForTrip(tripID string) string { return "" }
+
 func (w *GTFSRTWrapper) GetVehiclePositionTimestamp(tripID string) int64 {
 	if ts, ok := w.vehicleTS[tripID]; ok {
 		return ts
 	}
 	return 0
 }
+
 func (w *GTFSRTWrapper) GetTimestampForTrip(tripID string) int64 {
 	return w.GetVehiclePositionTimestamp(tripID)
 }
+
 func (w *GTFSRTWrapper) GetTimestampForFeedMessage() int64 { return w.headerTimestamp }
 
-// New vehicle accessors
+// Vehicle accessors
 func (w *GTFSRTWrapper) GetVehicleRefForTrip(tripID string) string { return w.tripVehicleRef[tripID] }
+
 func (w *GTFSRTWrapper) GetVehicleLatForTrip(tripID string) (float64, bool) {
 	v, ok := w.tripLat[tripID]
 	return v, ok
 }
+
 func (w *GTFSRTWrapper) GetVehicleLonForTrip(tripID string) (float64, bool) {
 	v, ok := w.tripLon[tripID]
 	return v, ok
 }
+
 func (w *GTFSRTWrapper) GetVehicleBearingForTrip(tripID string) (float64, bool) {
 	v, ok := w.tripBearing[tripID]
 	return v, ok
@@ -404,12 +361,15 @@ func (w *GTFSRTWrapper) GetScheduleRelationshipForStop(tripID, stopID string) in
 
 // Alerts placeholders
 func (w *GTFSRTWrapper) GetAllTripsWithAlert() []string { return nil }
+
 func (w *GTFSRTWrapper) GetTrainsWithAlertFilterObject(trips []string) map[string]bool {
 	return map[string]bool{}
 }
+
 func (w *GTFSRTWrapper) GetStopsWithAlertFilterObject(trips []string) map[string]bool {
 	return map[string]bool{}
 }
+
 func (w *GTFSRTWrapper) GetRoutesWithAlertFilterObject(trips []string) map[string]bool {
 	return map[string]bool{}
 }
@@ -419,23 +379,3 @@ func (w *GTFSRTWrapper) GetAlerts() []RTAlert                        { return w.
 func (w *GTFSRTWrapper) GetAlertIndicesByRoute(routeID string) []int { return w.alertsByRoute[routeID] }
 func (w *GTFSRTWrapper) GetAlertIndicesByStop(stopID string) []int   { return w.alertsByStop[stopID] }
 func (w *GTFSRTWrapper) GetAlertIndicesByTrip(tripID string) []int   { return w.alertsByTrip[tripID] }
-
-// translatedStringToText returns the best-effort text from a TranslatedString
-func translatedStringToText(ts *gtfsrtpb.TranslatedString) string {
-	if ts == nil || len(ts.Translation) == 0 {
-		return ""
-	}
-	// Prefer entries with no language tag or first entry
-	var first string
-	for _, tr := range ts.Translation {
-		if tr.Text != nil {
-			if tr.Language == nil || *tr.Language == "" {
-				return *tr.Text
-			}
-			if first == "" {
-				first = *tr.Text
-			}
-		}
-	}
-	return first
-}

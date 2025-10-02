@@ -1,25 +1,26 @@
-package gtfsrtsiri
+package internal
 
 import (
 	"fmt"
 )
 
-func presentableDistance(stopsFromCurStop int, distToCurrentStopKM float64, distToImmedNextStopKM float64) string {
+// PresentableDistance formats distance information for display
+func PresentableDistance(stopsFromCurStop int, distToCurrentStopKM float64, distToImmedNextStopKM float64) string {
 	D := 0.5
 	N := 3
 	E := 0.5
 	P := 500.0
 	T := 100.0
 
-	distToImmedNextStopMi := distToImmedNextStopKM * milesPerKilometer
-	distToCurrentStopMi := distToCurrentStopKM * milesPerKilometer
+	distToImmedNextStopMi := distToImmedNextStopKM * MilesPerKilometer
+	distToCurrentStopMi := distToCurrentStopKM * MilesPerKilometer
 
 	showMiles := (distToImmedNextStopMi > D) || ((stopsFromCurStop > N) && (distToCurrentStopMi > E))
 	if showMiles {
 		return fmt.Sprintf("%g mile%s", distToCurrentStopMi, ternary(distToCurrentStopMi == 1, "", "s"))
 	}
 	if stopsFromCurStop == 0 {
-		distFt := distToCurrentStopMi * feetPerMile
+		distFt := distToCurrentStopMi * FeetPerMile
 		if distFt < T {
 			return "at stop"
 		}

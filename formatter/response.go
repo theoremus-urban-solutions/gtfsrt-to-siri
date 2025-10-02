@@ -1,9 +1,13 @@
-package gtfsrtsiri
+package formatter
 
 import (
 	"encoding/json"
 	"strconv"
 	"strings"
+
+	"mta/gtfsrt-to-siri/gtfsrt"
+	"mta/gtfsrt-to-siri/internal"
+	"mta/gtfsrt-to-siri/siri"
 )
 
 type responseBuilder struct{}
@@ -16,43 +20,43 @@ func NewResponseBuilder() *responseBuilder {
 }
 
 // WrapEstimatedTimetableResponse wraps an ET delivery in a complete SIRI response
-func WrapEstimatedTimetableResponse(et EstimatedTimetable) *SiriResponse {
-	return &SiriResponse{
-		Siri: SiriServiceDelivery{
-			ServiceDelivery: VehicleAndSituation{
+func WrapEstimatedTimetableResponse(et siri.EstimatedTimetable) *siri.SiriResponse {
+	return &siri.SiriResponse{
+		Siri: siri.SiriServiceDelivery{
+			ServiceDelivery: siri.VehicleAndSituation{
 				ResponseTimestamp:          et.ResponseTimestamp,
-				EstimatedTimetableDelivery: []EstimatedTimetable{et},
+				EstimatedTimetableDelivery: []siri.EstimatedTimetable{et},
 			},
 		},
 	}
 }
 
 // WrapSituationExchangeResponse wraps a SX delivery in a complete SIRI response
-func WrapSituationExchangeResponse(sx SituationExchange, rt *GTFSRTWrapper) *SiriResponse {
+func WrapSituationExchangeResponse(sx siri.SituationExchange, rt *gtfsrt.GTFSRTWrapper) *siri.SiriResponse {
 	timestamp := rt.GetTimestampForFeedMessage()
-	return &SiriResponse{
-		Siri: SiriServiceDelivery{
-			ServiceDelivery: VehicleAndSituation{
-				ResponseTimestamp:         iso8601FromUnixSeconds(timestamp),
-				SituationExchangeDelivery: []SituationExchange{sx},
+	return &siri.SiriResponse{
+		Siri: siri.SiriServiceDelivery{
+			ServiceDelivery: siri.VehicleAndSituation{
+				ResponseTimestamp:         internal.Iso8601FromUnixSeconds(timestamp),
+				SituationExchangeDelivery: []siri.SituationExchange{sx},
 			},
 		},
 	}
 }
 
 // FilterEstimatedTimetable applies filters to ET journeys
-func FilterEstimatedTimetable(et EstimatedTimetable, monitoringRef, lineRef, directionRef string) EstimatedTimetable {
+func FilterEstimatedTimetable(et siri.EstimatedTimetable, monitoringRef, lineRef, directionRef string) siri.EstimatedTimetable {
 	monitoringRef = strings.ToLower(strings.TrimSpace(monitoringRef))
 	lineRef = strings.ToLower(strings.TrimSpace(lineRef))
 	directionRef = strings.ToLower(strings.TrimSpace(directionRef))
 
-	filtered := EstimatedTimetable{
+	filtered := siri.EstimatedTimetable{
 		ResponseTimestamp:            et.ResponseTimestamp,
-		EstimatedJourneyVersionFrame: []EstimatedJourneyVersionFrame{},
+		EstimatedJourneyVersionFrame: []siri.EstimatedJourneyVersionFrame{},
 	}
 
 	for _, frame := range et.EstimatedJourneyVersionFrame {
-		filteredJourneys := []EstimatedVehicleJourney{}
+		filteredJourneys := []siri.EstimatedVehicleJourney{}
 
 		for _, journey := range frame.EstimatedVehicleJourney {
 			// Filter by LineRef
@@ -91,7 +95,7 @@ func FilterEstimatedTimetable(et EstimatedTimetable, monitoringRef, lineRef, dir
 		}
 
 		if len(filteredJourneys) > 0 {
-			filtered.EstimatedJourneyVersionFrame = append(filtered.EstimatedJourneyVersionFrame, EstimatedJourneyVersionFrame{
+			filtered.EstimatedJourneyVersionFrame = append(filtered.EstimatedJourneyVersionFrame, siri.EstimatedJourneyVersionFrame{
 				RecordedAtTime:          frame.RecordedAtTime,
 				EstimatedVehicleJourney: filteredJourneys,
 			})
@@ -101,12 +105,12 @@ func FilterEstimatedTimetable(et EstimatedTimetable, monitoringRef, lineRef, dir
 	return filtered
 }
 
-func (rb *responseBuilder) BuildJSON(res *SiriResponse) []byte {
+func (rb *responseBuilder) BuildJSON(res *siri.SiriResponse) []byte {
 	b, _ := json.Marshal(res)
 	return b
 }
 
-func (rb *responseBuilder) BuildXML(res *SiriResponse) []byte {
+func (rb *responseBuilder) BuildXML(res *siri.SiriResponse) []byte {
 	var b strings.Builder
 	b.WriteString("<Siri xmlns=\"http://www.siri.org.uk/siri\">")
 	// ServiceDelivery
@@ -139,7 +143,7 @@ func (rb *responseBuilder) BuildXML(res *SiriResponse) []byte {
 	return []byte(b.String())
 }
 
-func writeVehicleMonitoringXML(b *strings.Builder, vm VehicleMonitoring) {
+func writeVehicleMonitoringXML(b *strings.Builder, vm siri.VehicleMonitoring) {
 	b.WriteString("<VehicleMonitoringDelivery>")
 	if vm.ResponseTimestamp != "" {
 		b.WriteString("<ResponseTimestamp>")
@@ -164,7 +168,7 @@ func writeVehicleMonitoringXML(b *strings.Builder, vm VehicleMonitoring) {
 	b.WriteString("</VehicleMonitoringDelivery>")
 }
 
-func writeMVJXML(b *strings.Builder, mvj MonitoredVehicleJourney) {
+func writeMVJXML(b *strings.Builder, mvj siri.MonitoredVehicleJourney) {
 	b.WriteString("<MonitoredVehicleJourney>")
 	if mvj.LineRef != "" {
 		b.WriteString("<LineRef>")
@@ -183,7 +187,7 @@ func writeMVJXML(b *strings.Builder, mvj MonitoredVehicleJourney) {
 		b.WriteString(strconv.FormatFloat(v, 'f', -1, 64))
 		b.WriteString("</DirectionRef>")
 	}
-	if fr, ok := mvj.FramedVehicleJourneyRef.(FramedVehicleJourneyRef); ok {
+	if fr, ok := mvj.FramedVehicleJourneyRef.(siri.FramedVehicleJourneyRef); ok {
 		b.WriteString("<FramedVehicleJourneyRef>")
 		if fr.DataFrameRef != "" {
 			b.WriteString("<DataFrameRef>")
@@ -239,7 +243,7 @@ func writeMVJXML(b *strings.Builder, mvj MonitoredVehicleJourney) {
 		b.WriteString("false")
 	}
 	b.WriteString("</Monitored>")
-	if loc, ok := mvj.VehicleLocation.(VehicleLocation); ok {
+	if loc, ok := mvj.VehicleLocation.(siri.VehicleLocation); ok {
 		if loc.Latitude != nil || loc.Longitude != nil {
 			b.WriteString("<VehicleLocation>")
 			if loc.Latitude != nil {
@@ -282,7 +286,7 @@ func writeOnwardCallsXML(b *strings.Builder, oc any) {
 		return
 	}
 	switch list := val.(type) {
-	case []SiriCall:
+	case []siri.SiriCall:
 		if len(list) == 0 {
 			return
 		}
@@ -297,7 +301,7 @@ func writeOnwardCallsXML(b *strings.Builder, oc any) {
 		}
 		b.WriteString("<OnwardCalls>")
 		for _, v := range list {
-			if c, ok := v.(SiriCall); ok {
+			if c, ok := v.(siri.SiriCall); ok {
 				writeCallXML(b, "OnwardCall", c)
 			}
 		}
@@ -305,7 +309,7 @@ func writeOnwardCallsXML(b *strings.Builder, oc any) {
 	}
 }
 
-func writeEstimatedTimetableXML(b *strings.Builder, et EstimatedTimetable) {
+func writeEstimatedTimetableXML(b *strings.Builder, et siri.EstimatedTimetable) {
 	b.WriteString("<EstimatedTimetableDelivery>")
 	if et.ResponseTimestamp != "" {
 		b.WriteString("<ResponseTimestamp>")
@@ -336,7 +340,7 @@ func writeEstimatedTimetableXML(b *strings.Builder, et EstimatedTimetable) {
 				b.WriteString(xmlEscape(journey.DirectionRef))
 				b.WriteString("</DirectionRef>")
 			}
-			// FramedVehicleJourneyRef
+			// siri.FramedVehicleJourneyRef
 			if journey.FramedVehicleJourneyRef.DatedVehicleJourneyRef != "" {
 				b.WriteString("<FramedVehicleJourneyRef>")
 				if journey.FramedVehicleJourneyRef.DataFrameRef != "" {
@@ -528,7 +532,7 @@ func writeEstimatedTimetableXML(b *strings.Builder, et EstimatedTimetable) {
 	b.WriteString("</EstimatedTimetableDelivery>")
 }
 
-func writeCallXML(b *strings.Builder, tag string, c SiriCall) {
+func writeCallXML(b *strings.Builder, tag string, c siri.SiriCall) {
 	b.WriteString("<" + tag + ">")
 	if c.ExpectedArrivalTime != "" {
 		b.WriteString("<ExpectedArrivalTime>")
@@ -575,9 +579,9 @@ func writeCallXML(b *strings.Builder, tag string, c SiriCall) {
 	b.WriteString("</" + tag + ">")
 }
 
-func writeSituationExchangeXML(b *strings.Builder, sx SituationExchange) {
-	// Expect sx.Situations to be []PtSituationElement
-	list, ok := sx.Situations.([]PtSituationElement)
+func writeSituationExchangeXML(b *strings.Builder, sx siri.SituationExchange) {
+	// Expect sx.Situations to be []siri.PtSituationElement
+	list, ok := sx.Situations.([]siri.PtSituationElement)
 	if !ok {
 		// nothing to write
 		return
@@ -649,7 +653,7 @@ func writeSituationExchangeXML(b *strings.Builder, sx SituationExchange) {
 		}
 		// Affects block
 		b.WriteString("<Affects>")
-		// Networks > AffectedNetwork > AffectedLine > AffectedRoute
+		// Networks > siri.AffectedNetwork > siri.AffectedLine > siri.AffectedRoute
 		if len(el.Affects.Networks) > 0 {
 			b.WriteString("<Networks>")
 			for _, network := range el.Affects.Networks {

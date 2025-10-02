@@ -3,8 +3,14 @@ package main
 import (
 	"flag"
 	"fmt"
-	lib "mta/gtfsrt-to-siri"
 	"strings"
+
+	"mta/gtfsrt-to-siri/config"
+	"mta/gtfsrt-to-siri/converter"
+	"mta/gtfsrt-to-siri/formatter"
+	"mta/gtfsrt-to-siri/gtfs"
+	"mta/gtfsrt-to-siri/gtfsrt"
+	"mta/gtfsrt-to-siri/internal"
 )
 
 func main() {
@@ -21,16 +27,16 @@ func main() {
 	modules := flag.String("modules", "tu,vp", "Comma-separated GTFS-RT modules to fetch: tu,vp,alerts")
 	flag.Parse()
 
-	lib.InitLogging()
-	if err := lib.LoadAppConfig(); err != nil {
+	internal.InitLogging()
+	if err := config.LoadAppConfig(); err != nil {
 		panic(err)
 	}
 
-	gtfsCfg, rtCfg := lib.SelectFeed(*feedName)
+	gtfsCfg, rtCfg := config.SelectFeed(*feedName)
 
 	switch *mode {
 	case "oneshot":
-		gtfs, _ := lib.NewGTFSIndexFromConfig(gtfsCfg)
+		gtfs, _ := gtfs.NewGTFSIndexFromConfig(gtfsCfg)
 		tu := rtCfg.TripUpdatesURL
 		vp := rtCfg.VehiclePositionsURL
 		if *tripUpdates != "" {
@@ -70,20 +76,20 @@ func main() {
 			panic("alerts module required for sx call; include via -modules=alerts")
 		}
 
-		rt := lib.NewGTFSRTWrapper(tu, vp, alerts)
+		rt := gtfsrt.NewGTFSRTWrapper(tu, vp, alerts)
 		_ = rt.Refresh()
-		conv := lib.NewConverter(gtfs, rt, lib.Config)
-		rb := lib.NewResponseBuilder()
-		
+		conv := converter.NewConverter(gtfs, rt, config.Config)
+		rb := formatter.NewResponseBuilder()
+
 		var buf []byte
 		if *call == "et" {
 			et := conv.BuildEstimatedTimetable()
 			// Apply filters if provided
 			if *monitoringRef != "" || *lineRef != "" || *directionRef != "" {
-				et = lib.FilterEstimatedTimetable(et, *monitoringRef, *lineRef, *directionRef)
+				et = formatter.FilterEstimatedTimetable(et, *monitoringRef, *lineRef, *directionRef)
 			}
 			// Wrap in SIRI response
-			resp := lib.WrapEstimatedTimetableResponse(et)
+			resp := formatter.WrapEstimatedTimetableResponse(et)
 			if strings.ToLower(*format) == "xml" {
 				buf = rb.BuildXML(resp)
 			} else {
@@ -98,7 +104,7 @@ func main() {
 			}
 		} else if *call == "sx" {
 			sx := conv.BuildSituationExchange()
-			resp := lib.WrapSituationExchangeResponse(sx, rt)
+			resp := formatter.WrapSituationExchangeResponse(sx, rt)
 			if strings.ToLower(*format) == "xml" {
 				buf = rb.BuildXML(resp)
 			} else {

@@ -1,37 +1,15 @@
-package gtfsrtsiri
+package converter
 
-type MonitoredVehicleJourney struct {
-	LineRef                  string   `json:"LineRef"`
-	DirectionRef             any      `json:"DirectionRef"`
-	FramedVehicleJourneyRef  any      `json:"FramedVehicleJourneyRef"`
-	JourneyPatternRef        string   `json:"JourneyPatternRef"`
-	PublishedLineName        string   `json:"PublishedLineName"`
-	OperatorRef              string   `json:"OperatorRef"`
-	OriginRef                string   `json:"OriginRef"`
-	DestinationRef           string   `json:"DestinationRef"`
-	DestinationName          string   `json:"DestinationName"`
-	OriginAimedDepartureTime string   `json:"OriginAimedDepartureTime"`
-	SituationRef             any      `json:"SituationRef"`
-	Monitored                bool     `json:"Monitored"`
-	VehicleLocation          any      `json:"VehicleLocation"`
-	Bearing                  *float64 `json:"Bearing"`
-	ProgressRate             any      `json:"ProgressRate"`
-	ProgressStatus           any      `json:"ProgressStatus"`
-	VehicleRef               string   `json:"VehicleRef"`
-	OnwardCalls              any      `json:"OnwardCalls"`
-}
+import (
+	"mta/gtfsrt-to-siri/gtfsrt"
+	"mta/gtfsrt-to-siri/internal"
+	"mta/gtfsrt-to-siri/siri"
+)
 
-// FramedVehicleJourneyRef moved to et_builder.go to avoid duplication
-
-type VehicleLocation struct {
-	Latitude  *float64 `json:"Latitude"`
-	Longitude *float64 `json:"Longitude"`
-}
-
-func (c *Converter) buildMVJ(tripID string) MonitoredVehicleJourney {
+func (c *Converter) buildMVJ(tripID string) siri.MonitoredVehicleJourney {
 	agency := c.Cfg.GTFS.AgencyID
 	startDate := c.GTFSRT.GetStartDateForTrip(tripID)
-	tripKey := TripKeyForConverter(tripID, agency, startDate)
+	tripKey := gtfsrt.TripKeyForConverter(tripID, agency, startDate)
 
 	// Prefer RT route_id; fallback to static lookup by tripKey
 	routeID := c.GTFSRT.GetRouteIDForTrip(tripID)
@@ -81,7 +59,7 @@ func (c *Converter) buildMVJ(tripID string) MonitoredVehicleJourney {
 		}
 	}
 
-	// FramedVehicleJourneyRef
+	// siri.FramedVehicleJourneyRef
 	dataFrameRef := ""
 	if len(startDate) == 8 { // YYYYMMDD
 		dataFrameRef = startDate[:4] + "-" + startDate[4:6] + "-" + startDate[6:8]
@@ -92,19 +70,19 @@ func (c *Converter) buildMVJ(tripID string) MonitoredVehicleJourney {
 	originAimed := ""
 	if origin != "" {
 		if dep := c.GTFSRT.GetExpectedDepartureTimeAtStopForTrip(tripID, origin); dep > 0 {
-			originAimed = iso8601FromUnixSeconds(dep)
+			originAimed = internal.Iso8601FromUnixSeconds(dep)
 		} else if arr := c.GTFSRT.GetExpectedArrivalTimeAtStopForTrip(tripID, origin); arr > 0 {
-			originAimed = iso8601FromUnixSeconds(arr)
+			originAimed = internal.Iso8601FromUnixSeconds(arr)
 		}
 	}
 
 	// OnwardCalls: built elsewhere with limits
 	onward := c.buildOnwardCalls(tripID, -1)
 
-	return MonitoredVehicleJourney{
+	return siri.MonitoredVehicleJourney{
 		LineRef:                 lineRef,
 		DirectionRef:            direction,
-		FramedVehicleJourneyRef: FramedVehicleJourneyRef{DataFrameRef: dataFrameRef, DatedVehicleJourneyRef: dvj},
+		FramedVehicleJourneyRef: siri.FramedVehicleJourneyRef{DataFrameRef: dataFrameRef, DatedVehicleJourneyRef: dvj},
 		JourneyPatternRef: func() string {
 			sh := c.GTFS.GetShapeIDForTrip(tripKey)
 			if sh == "" {
@@ -123,7 +101,7 @@ func (c *Converter) buildMVJ(tripID string) MonitoredVehicleJourney {
 		OriginAimedDepartureTime: originAimed,
 		SituationRef:             nil,
 		Monitored:                true,
-		VehicleLocation:          VehicleLocation{Latitude: latPtr, Longitude: lonPtr},
+		VehicleLocation:          siri.VehicleLocation{Latitude: latPtr, Longitude: lonPtr},
 		Bearing:                  bearing,
 		ProgressRate:             nil,
 		ProgressStatus:           nil,
@@ -153,9 +131,9 @@ func (c *Converter) buildOnwardCalls(tripID string, maxOnward int) any {
 	// Base distances
 	agency := c.Cfg.GTFS.AgencyID
 	startDate := c.GTFSRT.GetStartDateForTrip(tripID)
-	tripKey := TripKeyForConverter(tripID, agency, startDate)
+	tripKey := gtfsrt.TripKeyForConverter(tripID, agency, startDate)
 
-	calls := make([]SiriCall, 0, limit)
+	calls := make([]siri.SiriCall, 0, limit)
 	// compute vehicle distance and next-stop distance for presentable distance tuning
 	vehKMOverall := c.Snap.GetVehicleDistanceAlongRouteInKilometers(tripKey)
 	nextStopDistKM := 0.0
@@ -172,10 +150,10 @@ func (c *Converter) buildOnwardCalls(tripID string, maxOnward int) any {
 		call.StopPointRef = applyFieldMutators(sid, c.Cfg.Converter.FieldMutators.StopPointRef)
 		call.StopPointName = c.GTFS.GetStopName(sid)
 		if eta := c.GTFSRT.GetExpectedArrivalTimeAtStopForTrip(tripID, sid); eta > 0 {
-			call.ExpectedArrivalTime = iso8601FromUnixSeconds(eta)
+			call.ExpectedArrivalTime = internal.Iso8601FromUnixSeconds(eta)
 		}
 		if etd := c.GTFSRT.GetExpectedDepartureTimeAtStopForTrip(tripID, sid); etd > 0 {
-			call.ExpectedDepartureTime = iso8601FromUnixSeconds(etd)
+			call.ExpectedDepartureTime = internal.Iso8601FromUnixSeconds(etd)
 		}
 		// Distances along route
 		callDistKM := c.GTFS.GetStopDistanceAlongRouteForTripInKilometers(tripKey, sid)
@@ -188,7 +166,7 @@ func (c *Converter) buildOnwardCalls(tripID string, maxOnward int) any {
 			dfc := (callDistKM - vehKM) * 1000
 			call.Extensions.Distances.DistanceFromCall = &dfc
 			// presentable distance: use distance to current call and distance to immediate next stop
-			call.Extensions.Distances.PresentableDistance = presentableDistance(i, callDistKM-vehKM, nextStopDistKM)
+			call.Extensions.Distances.PresentableDistance = internal.PresentableDistance(i, callDistKM-vehKM, nextStopDistKM)
 		}
 		calls = append(calls, call)
 	}

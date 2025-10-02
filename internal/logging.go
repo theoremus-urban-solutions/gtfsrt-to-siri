@@ -1,4 +1,4 @@
-package gtfsrtsiri
+package internal
 
 import (
 	"log"

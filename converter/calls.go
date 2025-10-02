@@ -1,35 +1,25 @@
-package gtfsrtsiri
+package converter
 
-type SiriCall struct {
-	Extensions struct {
-		Distances struct {
-			PresentableDistance    string   `json:"PresentableDistance"`
-			DistanceFromCall       *float64 `json:"DistanceFromCall"`
-			StopsFromCall          int      `json:"StopsFromCall"`
-			CallDistanceAlongRoute float64  `json:"CallDistanceAlongRoute"`
-		} `json:"Distances"`
-	} `json:"Extensions"`
-	ExpectedArrivalTime   string `json:"ExpectedArrivalTime"`
-	ExpectedDepartureTime string `json:"ExpectedDepartureTime"`
-	StopPointRef          string `json:"StopPointRef"`
-	StopPointName         string `json:"StopPointName"`
-	VisitNumber           int    `json:"VisitNumber"`
-}
+import (
+	"mta/gtfsrt-to-siri/gtfsrt"
+	"mta/gtfsrt-to-siri/internal"
+	"mta/gtfsrt-to-siri/siri"
+)
 
-func (c *Converter) buildCall(tripID, stopID string) SiriCall {
-	var call SiriCall
+func (c *Converter) buildCall(tripID, stopID string) siri.SiriCall {
+	var call siri.SiriCall
 	call.VisitNumber = 1
 	// timings
 	if eta := c.GTFSRT.GetExpectedArrivalTimeAtStopForTrip(tripID, stopID); eta > 0 {
-		call.ExpectedArrivalTime = iso8601FromUnixSeconds(eta)
+		call.ExpectedArrivalTime = internal.Iso8601FromUnixSeconds(eta)
 	}
 	if etd := c.GTFSRT.GetExpectedDepartureTimeAtStopForTrip(tripID, stopID); etd > 0 {
-		call.ExpectedDepartureTime = iso8601FromUnixSeconds(etd)
+		call.ExpectedDepartureTime = internal.Iso8601FromUnixSeconds(etd)
 	}
 	// distances
 	agency := c.Cfg.GTFS.AgencyID
 	startDate := c.GTFSRT.GetStartDateForTrip(tripID)
-	tripKey := TripKeyForConverter(tripID, agency, startDate)
+	tripKey := gtfsrt.TripKeyForConverter(tripID, agency, startDate)
 	// distance along route at the call stop
 	callDistKM := c.GTFS.GetStopDistanceAlongRouteForTripInKilometers(tripKey, stopID)
 	call.Extensions.Distances.CallDistanceAlongRoute = roundTo(callDistKM*1000, c.Cfg.Converter.CallDistanceAlongRouteNumDigits)
@@ -39,7 +29,7 @@ func (c *Converter) buildCall(tripID, stopID string) SiriCall {
 		dfc := (callDistKM - vehKM) * 1000
 		call.Extensions.Distances.DistanceFromCall = &dfc
 		// presentable distance uses stopsFromCall unknown here; caller sets it when building lists
-		call.Extensions.Distances.PresentableDistance = presentableDistance(call.Extensions.Distances.StopsFromCall, dfc/1000, 0)
+		call.Extensions.Distances.PresentableDistance = internal.PresentableDistance(call.Extensions.Distances.StopsFromCall, dfc/1000, 0)
 	}
 	return call
 }
