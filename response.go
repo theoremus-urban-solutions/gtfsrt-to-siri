@@ -10,6 +10,97 @@ type responseBuilder struct{}
 
 func newResponseBuilder() *responseBuilder { return &responseBuilder{} }
 
+// NewResponseBuilder creates a new response builder for formatting SIRI responses
+func NewResponseBuilder() *responseBuilder {
+	return newResponseBuilder()
+}
+
+// WrapEstimatedTimetableResponse wraps an ET delivery in a complete SIRI response
+func WrapEstimatedTimetableResponse(et EstimatedTimetable) *SiriResponse {
+	return &SiriResponse{
+		Siri: SiriServiceDelivery{
+			ServiceDelivery: VehicleAndSituation{
+				ResponseTimestamp:          et.ResponseTimestamp,
+				EstimatedTimetableDelivery: []EstimatedTimetable{et},
+			},
+		},
+	}
+}
+
+// WrapSituationExchangeResponse wraps a SX delivery in a complete SIRI response
+func WrapSituationExchangeResponse(sx SituationExchange, rt *GTFSRTWrapper) *SiriResponse {
+	timestamp := rt.GetTimestampForFeedMessage()
+	return &SiriResponse{
+		Siri: SiriServiceDelivery{
+			ServiceDelivery: VehicleAndSituation{
+				ResponseTimestamp:         iso8601FromUnixSeconds(timestamp),
+				SituationExchangeDelivery: []SituationExchange{sx},
+			},
+		},
+	}
+}
+
+// FilterEstimatedTimetable applies filters to ET journeys
+func FilterEstimatedTimetable(et EstimatedTimetable, monitoringRef, lineRef, directionRef string) EstimatedTimetable {
+	monitoringRef = strings.ToLower(strings.TrimSpace(monitoringRef))
+	lineRef = strings.ToLower(strings.TrimSpace(lineRef))
+	directionRef = strings.ToLower(strings.TrimSpace(directionRef))
+
+	filtered := EstimatedTimetable{
+		ResponseTimestamp:            et.ResponseTimestamp,
+		EstimatedJourneyVersionFrame: []EstimatedJourneyVersionFrame{},
+	}
+
+	for _, frame := range et.EstimatedJourneyVersionFrame {
+		filteredJourneys := []EstimatedVehicleJourney{}
+
+		for _, journey := range frame.EstimatedVehicleJourney {
+			// Filter by LineRef
+			if lineRef != "" && !strings.Contains(strings.ToLower(journey.LineRef), lineRef) {
+				continue
+			}
+
+			// Filter by DirectionRef
+			if directionRef != "" && strings.ToLower(journey.DirectionRef) != directionRef {
+				continue
+			}
+
+			// Filter by MonitoringRef (stop)
+			if monitoringRef != "" {
+				hasStop := false
+				for _, call := range journey.RecordedCalls {
+					if strings.Contains(strings.ToLower(call.StopPointRef), monitoringRef) {
+						hasStop = true
+						break
+					}
+				}
+				if !hasStop {
+					for _, call := range journey.EstimatedCalls {
+						if strings.Contains(strings.ToLower(call.StopPointRef), monitoringRef) {
+							hasStop = true
+							break
+						}
+					}
+				}
+				if !hasStop {
+					continue
+				}
+			}
+
+			filteredJourneys = append(filteredJourneys, journey)
+		}
+
+		if len(filteredJourneys) > 0 {
+			filtered.EstimatedJourneyVersionFrame = append(filtered.EstimatedJourneyVersionFrame, EstimatedJourneyVersionFrame{
+				RecordedAtTime:          frame.RecordedAtTime,
+				EstimatedVehicleJourney: filteredJourneys,
+			})
+		}
+	}
+
+	return filtered
+}
+
 func (rb *responseBuilder) BuildJSON(res *SiriResponse) []byte {
 	b, _ := json.Marshal(res)
 	return b

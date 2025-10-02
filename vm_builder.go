@@ -99,7 +99,7 @@ func (c *Converter) buildMVJ(tripID string) MonitoredVehicleJourney {
 	}
 
 	// OnwardCalls: built elsewhere with limits
-	onward := c.buildOnwardCalls(tripID, -1, "", false)
+	onward := c.buildOnwardCalls(tripID, -1)
 
 	return MonitoredVehicleJourney{
 		LineRef:                 lineRef,
@@ -140,8 +140,8 @@ func (c *Converter) CfGDatedVehicleJourneyRef(tripKey, agency string) string {
 	return c.GTFS.GetFullTripIDForTrip(tripKey)
 }
 
-// buildOnwardCalls builds OnwardCalls with optional max limit and behavior for StopMonitoring
-func (c *Converter) buildOnwardCalls(tripID string, maxOnward int, selectedStopID string, stopMonitoring bool) any {
+// buildOnwardCalls builds OnwardCalls with optional max limit
+func (c *Converter) buildOnwardCalls(tripID string, maxOnward int) any {
 	stops := c.GTFSRT.GetOnwardStopIDsForTrip(tripID)
 	if len(stops) == 0 {
 		return nil
@@ -149,12 +149,6 @@ func (c *Converter) buildOnwardCalls(tripID string, maxOnward int, selectedStopI
 	limit := len(stops)
 	if maxOnward >= 0 && maxOnward < limit {
 		limit = maxOnward
-	}
-	if stopMonitoring && selectedStopID != "" {
-		idx := c.GTFSRT.GetIndexOfStopInStopTimeUpdatesForTrip(tripID, selectedStopID)
-		if idx >= 0 && (idx+1) > limit {
-			limit = idx + 1
-		}
 	}
 	// Base distances
 	agency := c.Cfg.GTFS.AgencyID

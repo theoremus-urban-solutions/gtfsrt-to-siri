@@ -73,28 +73,37 @@ func main() {
 		rt := lib.NewGTFSRTWrapper(tu, vp, alerts)
 		_ = rt.Refresh()
 		conv := lib.NewConverter(gtfs, rt, lib.Config)
-		cache := lib.NewConverterCache(conv)
+		rb := lib.NewResponseBuilder()
+		
 		var buf []byte
-		var err error
 		if *call == "et" {
-			params := map[string]string{}
-			if *monitoringRef != "" {
-				params["monitoringref"] = *monitoringRef
+			et := conv.BuildEstimatedTimetable()
+			// Apply filters if provided
+			if *monitoringRef != "" || *lineRef != "" || *directionRef != "" {
+				et = lib.FilterEstimatedTimetable(et, *monitoringRef, *lineRef, *directionRef)
 			}
-			if *lineRef != "" {
-				params["lineref"] = *lineRef
+			// Wrap in SIRI response
+			resp := lib.WrapEstimatedTimetableResponse(et)
+			if strings.ToLower(*format) == "xml" {
+				buf = rb.BuildXML(resp)
+			} else {
+				buf = rb.BuildJSON(resp)
 			}
-			if *directionRef != "" {
-				params["directionref"] = *directionRef
-			}
-			buf, err = cache.GetEstimatedTimetableResponse(params, *format)
 		} else if *call == "vm" {
-			buf, err = cache.GetVehicleMonitoringResponse(map[string]string{}, *format)
+			resp := conv.GetCompleteVehicleMonitoringResponse()
+			if strings.ToLower(*format) == "xml" {
+				buf = rb.BuildXML(resp)
+			} else {
+				buf = rb.BuildJSON(resp)
+			}
 		} else if *call == "sx" {
-			buf, err = cache.GetSituationExchangeResponse(*format)
-		}
-		if err != nil {
-			panic(err)
+			sx := conv.BuildSituationExchange()
+			resp := lib.WrapSituationExchangeResponse(sx, rt)
+			if strings.ToLower(*format) == "xml" {
+				buf = rb.BuildXML(resp)
+			} else {
+				buf = rb.BuildJSON(resp)
+			}
 		}
 		fmt.Println(string(buf))
 	default:
