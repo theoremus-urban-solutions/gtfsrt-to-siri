@@ -1,115 +1,13 @@
 package formatter
 
 import (
-	"encoding/json"
 	"strconv"
 	"strings"
 
-	"mta/gtfsrt-to-siri/gtfsrt"
-	"mta/gtfsrt-to-siri/internal"
 	"mta/gtfsrt-to-siri/siri"
 )
 
-type responseBuilder struct{}
-
-func newResponseBuilder() *responseBuilder { return &responseBuilder{} }
-
-// NewResponseBuilder creates a new response builder for formatting SIRI responses
-func NewResponseBuilder() *responseBuilder {
-	return newResponseBuilder()
-}
-
-// WrapEstimatedTimetableResponse wraps an ET delivery in a complete SIRI response
-func WrapEstimatedTimetableResponse(et siri.EstimatedTimetable) *siri.SiriResponse {
-	return &siri.SiriResponse{
-		Siri: siri.SiriServiceDelivery{
-			ServiceDelivery: siri.VehicleAndSituation{
-				ResponseTimestamp:          et.ResponseTimestamp,
-				EstimatedTimetableDelivery: []siri.EstimatedTimetable{et},
-			},
-		},
-	}
-}
-
-// WrapSituationExchangeResponse wraps a SX delivery in a complete SIRI response
-func WrapSituationExchangeResponse(sx siri.SituationExchange, rt *gtfsrt.GTFSRTWrapper) *siri.SiriResponse {
-	timestamp := rt.GetTimestampForFeedMessage()
-	return &siri.SiriResponse{
-		Siri: siri.SiriServiceDelivery{
-			ServiceDelivery: siri.VehicleAndSituation{
-				ResponseTimestamp:         internal.Iso8601FromUnixSeconds(timestamp),
-				SituationExchangeDelivery: []siri.SituationExchange{sx},
-			},
-		},
-	}
-}
-
-// FilterEstimatedTimetable applies filters to ET journeys
-func FilterEstimatedTimetable(et siri.EstimatedTimetable, monitoringRef, lineRef, directionRef string) siri.EstimatedTimetable {
-	monitoringRef = strings.ToLower(strings.TrimSpace(monitoringRef))
-	lineRef = strings.ToLower(strings.TrimSpace(lineRef))
-	directionRef = strings.ToLower(strings.TrimSpace(directionRef))
-
-	filtered := siri.EstimatedTimetable{
-		ResponseTimestamp:            et.ResponseTimestamp,
-		EstimatedJourneyVersionFrame: []siri.EstimatedJourneyVersionFrame{},
-	}
-
-	for _, frame := range et.EstimatedJourneyVersionFrame {
-		filteredJourneys := []siri.EstimatedVehicleJourney{}
-
-		for _, journey := range frame.EstimatedVehicleJourney {
-			// Filter by LineRef
-			if lineRef != "" && !strings.Contains(strings.ToLower(journey.LineRef), lineRef) {
-				continue
-			}
-
-			// Filter by DirectionRef
-			if directionRef != "" && strings.ToLower(journey.DirectionRef) != directionRef {
-				continue
-			}
-
-			// Filter by MonitoringRef (stop)
-			if monitoringRef != "" {
-				hasStop := false
-				for _, call := range journey.RecordedCalls {
-					if strings.Contains(strings.ToLower(call.StopPointRef), monitoringRef) {
-						hasStop = true
-						break
-					}
-				}
-				if !hasStop {
-					for _, call := range journey.EstimatedCalls {
-						if strings.Contains(strings.ToLower(call.StopPointRef), monitoringRef) {
-							hasStop = true
-							break
-						}
-					}
-				}
-				if !hasStop {
-					continue
-				}
-			}
-
-			filteredJourneys = append(filteredJourneys, journey)
-		}
-
-		if len(filteredJourneys) > 0 {
-			filtered.EstimatedJourneyVersionFrame = append(filtered.EstimatedJourneyVersionFrame, siri.EstimatedJourneyVersionFrame{
-				RecordedAtTime:          frame.RecordedAtTime,
-				EstimatedVehicleJourney: filteredJourneys,
-			})
-		}
-	}
-
-	return filtered
-}
-
-func (rb *responseBuilder) BuildJSON(res *siri.SiriResponse) []byte {
-	b, _ := json.Marshal(res)
-	return b
-}
-
+// BuildXML serializes a SIRI response to XML
 func (rb *responseBuilder) BuildXML(res *siri.SiriResponse) []byte {
 	var b strings.Builder
 	b.WriteString("<Siri xmlns=\"http://www.siri.org.uk/siri\">")

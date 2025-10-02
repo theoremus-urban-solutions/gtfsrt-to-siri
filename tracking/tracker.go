@@ -1,15 +1,19 @@
-package gtfsrtsiri
+package tracking
 
 import (
 	"math"
 	"time"
+
+	"mta/gtfsrt-to-siri/config"
+	"mta/gtfsrt-to-siri/gtfs"
+	"mta/gtfsrt-to-siri/gtfsrt"
 )
 
 type Snapshot struct {
 	gtfsrtTimestamp int64
 	previous        *Snapshot
 	trainLocations  map[string]*TrainLocation
-	tripKeyToGTFS   map[string]*GTFSIndex
+	tripKeyToGTFS   map[string]*gtfs.GTFSIndex
 }
 
 type TrainLocation struct {
@@ -39,7 +43,7 @@ type TrainState struct {
 
 var previousSnapshot *Snapshot
 
-func NewSnapshot(gtfs *GTFSIndex, rt *GTFSRTWrapper, cfg AppConfig) (*Snapshot, error) {
+func NewSnapshot(gtfsIdx *gtfs.GTFSIndex, rt *gtfsrt.GTFSRTWrapper, cfg config.AppConfig) (*Snapshot, error) {
 	ts := rt.GetTimestampForFeedMessage()
 	if previousSnapshot != nil && ts < previousSnapshot.gtfsrtTimestamp {
 		return previousSnapshot, nil
@@ -51,13 +55,13 @@ func NewSnapshot(gtfs *GTFSIndex, rt *GTFSRTWrapper, cfg AppConfig) (*Snapshot, 
 		gtfsrtTimestamp: ts,
 		previous:        previousSnapshot,
 		trainLocations:  map[string]*TrainLocation{},
-		tripKeyToGTFS:   map[string]*GTFSIndex{},
+		tripKeyToGTFS:   map[string]*gtfs.GTFSIndex{},
 	}
 	// Fill using RT data; interpolate between stops when possible
 	agency := cfg.GTFS.AgencyID
 	for _, rtTrip := range rt.GetAllMonitoredTrips() {
 		startDate := rt.GetStartDateForTrip(rtTrip)
-		tripKey := TripKeyForConverter(rtTrip, agency, startDate)
+		tripKey := gtfsrt.TripKeyForConverter(rtTrip, agency, startDate)
 		// If GTFS-RT vehicle location exists, use it; else approximate between origin and next stops
 		var coords [][]float64
 		var bearing float64
@@ -86,10 +90,10 @@ func NewSnapshot(gtfs *GTFSIndex, rt *GTFSRTWrapper, cfg AppConfig) (*Snapshot, 
 					s1 = onward[1]
 				}
 				// Compute distances along route
-				d0 := gtfs.GetStopDistanceAlongRouteForTripInKilometers(tripKey, s0)
+				d0 := gtfsIdx.GetStopDistanceAlongRouteForTripInKilometers(tripKey, s0)
 				var d1 float64
 				if s1 != "" {
-					d1 = gtfs.GetStopDistanceAlongRouteForTripInKilometers(tripKey, s1)
+					d1 = gtfsIdx.GetStopDistanceAlongRouteForTripInKilometers(tripKey, s1)
 				} else {
 					d1 = d0
 				}
@@ -109,23 +113,23 @@ func NewSnapshot(gtfs *GTFSIndex, rt *GTFSRTWrapper, cfg AppConfig) (*Snapshot, 
 					}
 				}
 				// Map distance to coordinate on shape
-				lon, lat, ok := gtfs.GetCoordinateAtDistanceForTrip(tripKey, curKM)
+				lon, lat, ok := gtfsIdx.GetCoordinateAtDistanceForTrip(tripKey, curKM)
 				if ok {
 					coords = [][]float64{{lon, lat}}
 				}
 			}
 		} else {
 			// derive distance from RT position by projection
-			shapeID := gtfs.GetShapeIDForTrip(tripKey)
-			pts := gtfs.shapePoints[shapeID]
+			shapeID := gtfsIdx.GetShapeIDForTrip(tripKey)
+			pts := gtfsIdx.ShapePoints[shapeID]
 			if len(pts) > 1 {
-				idx, t, _ := nearestSegmentProjection(pts, [2]float64{coords[0][0], coords[0][1]})
-				cum := gtfs.shapeCumKM[shapeID]
+				idx, t, _ := gtfs.NearestSegmentProjection(pts, [2]float64{coords[0][0], coords[0][1]})
+				cum := gtfsIdx.ShapeCumKM[shapeID]
 				if idx >= 0 && idx < len(cum) {
 					if idx == len(pts)-1 {
 						startDistKM = cum[idx]
 					} else {
-						segKM := haversineKM(pts[idx][1], pts[idx][0], pts[idx+1][1], pts[idx+1][0])
+						segKM := gtfs.HasversineKM(pts[idx][1], pts[idx][0], pts[idx+1][1], pts[idx+1][0])
 						startDistKM = cum[idx] + t*segKM
 					}
 				}
@@ -140,7 +144,7 @@ func NewSnapshot(gtfs *GTFSIndex, rt *GTFSRTWrapper, cfg AppConfig) (*Snapshot, 
 			LineDistanceKM:        math.NaN(),
 			ImmediateStopID:       "",
 		}
-		s.tripKeyToGTFS[tripKey] = gtfs
+		s.tripKeyToGTFS[tripKey] = gtfsIdx
 	}
 	previousSnapshot = s
 	return s, nil

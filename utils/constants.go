@@ -1,4 +1,4 @@
-package internal
+package utils
 
 // Constants for distance conversions
 const (

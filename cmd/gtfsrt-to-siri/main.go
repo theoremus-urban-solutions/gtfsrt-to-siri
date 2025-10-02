@@ -10,7 +10,7 @@ import (
 	"mta/gtfsrt-to-siri/formatter"
 	"mta/gtfsrt-to-siri/gtfs"
 	"mta/gtfsrt-to-siri/gtfsrt"
-	"mta/gtfsrt-to-siri/internal"
+	"mta/gtfsrt-to-siri/utils"
 )
 
 func main() {
@@ -27,7 +27,7 @@ func main() {
 	modules := flag.String("modules", "tu,vp", "Comma-separated GTFS-RT modules to fetch: tu,vp,alerts")
 	flag.Parse()
 
-	internal.InitLogging()
+	utils.InitLogging()
 	if err := config.LoadAppConfig(); err != nil {
 		panic(err)
 	}
@@ -82,6 +82,8 @@ func main() {
 		rb := formatter.NewResponseBuilder()
 
 		var buf []byte
+		codespace := config.Config.GTFS.AgencyID
+
 		if *call == "et" {
 			et := conv.BuildEstimatedTimetable()
 			// Apply filters if provided
@@ -89,7 +91,7 @@ func main() {
 				et = formatter.FilterEstimatedTimetable(et, *monitoringRef, *lineRef, *directionRef)
 			}
 			// Wrap in SIRI response
-			resp := formatter.WrapEstimatedTimetableResponse(et)
+			resp := formatter.WrapEstimatedTimetableResponse(et, codespace)
 			if strings.ToLower(*format) == "xml" {
 				buf = rb.BuildXML(resp)
 			} else {
@@ -104,7 +106,8 @@ func main() {
 			}
 		} else if *call == "sx" {
 			sx := conv.BuildSituationExchange()
-			resp := formatter.WrapSituationExchangeResponse(sx, rt)
+			timestamp := rt.GetTimestampForFeedMessage()
+			resp := formatter.WrapSituationExchangeResponse(sx, timestamp, codespace)
 			if strings.ToLower(*format) == "xml" {
 				buf = rb.BuildXML(resp)
 			} else {

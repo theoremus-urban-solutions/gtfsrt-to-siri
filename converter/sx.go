@@ -2,7 +2,7 @@ package converter
 
 import (
 	"mta/gtfsrt-to-siri/gtfsrt"
-	"mta/gtfsrt-to-siri/internal"
+	"mta/gtfsrt-to-siri/utils"
 	"mta/gtfsrt-to-siri/siri"
 )
 
@@ -33,10 +33,10 @@ func (c *Converter) BuildSituationExchange() siri.SituationExchange {
 			Description:     description,
 		}
 		if a.Start > 0 {
-			el.PublicationWindow.StartTime = internal.Iso8601FromUnixSeconds(a.Start)
+			el.PublicationWindow.StartTime = utils.Iso8601FromUnixSeconds(a.Start)
 		}
 		if a.End > 0 {
-			el.PublicationWindow.EndTime = internal.Iso8601FromUnixSeconds(a.End)
+			el.PublicationWindow.EndTime = utils.Iso8601FromUnixSeconds(a.End)
 		}
 		// Set Progress based on validity period
 		if a.End > 0 && a.End < now {

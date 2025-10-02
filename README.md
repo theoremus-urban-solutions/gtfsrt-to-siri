@@ -2,6 +2,12 @@
 
 Convert GTFS-Realtime feeds (Trip Updates, Vehicle Positions, Service Alerts) to SIRI format (VM, ET, SX).
 
+**Features:**
+- **On-demand conversion** – No caching layer; designed for integration into larger systems
+- **Fast HTTP calls** – 10-second timeouts with 3 retries
+- **Standardized SIRI output** – Includes `ProducerRef` (codespace) in all responses
+- **Modular architecture** – Clean separation: `siri/`, `gtfs/`, `gtfsrt/`, `converter/`, `formatter/`, `tracking/`, `utils/`
+
 ## Acknowledgments
 
 Inspired by and adapted from MTA's [GTFS-Realtime to SIRI Converter](https://github.com/availabs/MTA_Subway_GTFS-Realtime_to_SIRI_Converter). Core conversion logic and SIRI structure design drew from their implementation.

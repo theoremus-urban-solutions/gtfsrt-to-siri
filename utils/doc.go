@@ -1,4 +1,4 @@
-// Package internal provides internal utility functions for the gtfsrt-to-siri converter.
+// Package utils provides internal utility functions for the gtfsrt-to-siri converter.
 // This package is not intended to be imported by external code.
 //
 // It contains:
@@ -6,4 +6,4 @@
 //   - Distance calculation and formatting
 //   - Logging initialization
 //   - Shared constants
-package internal
+package utils

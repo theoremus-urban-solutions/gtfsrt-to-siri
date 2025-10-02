@@ -2,7 +2,7 @@ package converter
 
 import (
 	"mta/gtfsrt-to-siri/gtfsrt"
-	"mta/gtfsrt-to-siri/internal"
+	"mta/gtfsrt-to-siri/utils"
 	"mta/gtfsrt-to-siri/siri"
 )
 
@@ -70,9 +70,9 @@ func (c *Converter) buildMVJ(tripID string) siri.MonitoredVehicleJourney {
 	originAimed := ""
 	if origin != "" {
 		if dep := c.GTFSRT.GetExpectedDepartureTimeAtStopForTrip(tripID, origin); dep > 0 {
-			originAimed = internal.Iso8601FromUnixSeconds(dep)
+			originAimed = utils.Iso8601FromUnixSeconds(dep)
 		} else if arr := c.GTFSRT.GetExpectedArrivalTimeAtStopForTrip(tripID, origin); arr > 0 {
-			originAimed = internal.Iso8601FromUnixSeconds(arr)
+			originAimed = utils.Iso8601FromUnixSeconds(arr)
 		}
 	}
 
@@ -150,10 +150,10 @@ func (c *Converter) buildOnwardCalls(tripID string, maxOnward int) any {
 		call.StopPointRef = applyFieldMutators(sid, c.Cfg.Converter.FieldMutators.StopPointRef)
 		call.StopPointName = c.GTFS.GetStopName(sid)
 		if eta := c.GTFSRT.GetExpectedArrivalTimeAtStopForTrip(tripID, sid); eta > 0 {
-			call.ExpectedArrivalTime = internal.Iso8601FromUnixSeconds(eta)
+			call.ExpectedArrivalTime = utils.Iso8601FromUnixSeconds(eta)
 		}
 		if etd := c.GTFSRT.GetExpectedDepartureTimeAtStopForTrip(tripID, sid); etd > 0 {
-			call.ExpectedDepartureTime = internal.Iso8601FromUnixSeconds(etd)
+			call.ExpectedDepartureTime = utils.Iso8601FromUnixSeconds(etd)
 		}
 		// Distances along route
 		callDistKM := c.GTFS.GetStopDistanceAlongRouteForTripInKilometers(tripKey, sid)
@@ -166,7 +166,7 @@ func (c *Converter) buildOnwardCalls(tripID string, maxOnward int) any {
 			dfc := (callDistKM - vehKM) * 1000
 			call.Extensions.Distances.DistanceFromCall = &dfc
 			// presentable distance: use distance to current call and distance to immediate next stop
-			call.Extensions.Distances.PresentableDistance = internal.PresentableDistance(i, callDistKM-vehKM, nextStopDistKM)
+			call.Extensions.Distances.PresentableDistance = utils.PresentableDistance(i, callDistKM-vehKM, nextStopDistKM)
 		}
 		calls = append(calls, call)
 	}

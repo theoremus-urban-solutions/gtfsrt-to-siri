@@ -2,8 +2,8 @@ package converter
 
 import (
 	"mta/gtfsrt-to-siri/gtfsrt"
-	"mta/gtfsrt-to-siri/internal"
 	"mta/gtfsrt-to-siri/siri"
+	"mta/gtfsrt-to-siri/utils"
 )
 
 func (c *Converter) buildCall(tripID, stopID string) siri.SiriCall {
@@ -11,10 +11,10 @@ func (c *Converter) buildCall(tripID, stopID string) siri.SiriCall {
 	call.VisitNumber = 1
 	// timings
 	if eta := c.GTFSRT.GetExpectedArrivalTimeAtStopForTrip(tripID, stopID); eta > 0 {
-		call.ExpectedArrivalTime = internal.Iso8601FromUnixSeconds(eta)
+		call.ExpectedArrivalTime = utils.Iso8601FromUnixSeconds(eta)
 	}
 	if etd := c.GTFSRT.GetExpectedDepartureTimeAtStopForTrip(tripID, stopID); etd > 0 {
-		call.ExpectedDepartureTime = internal.Iso8601FromUnixSeconds(etd)
+		call.ExpectedDepartureTime = utils.Iso8601FromUnixSeconds(etd)
 	}
 	// distances
 	agency := c.Cfg.GTFS.AgencyID
@@ -29,7 +29,7 @@ func (c *Converter) buildCall(tripID, stopID string) siri.SiriCall {
 		dfc := (callDistKM - vehKM) * 1000
 		call.Extensions.Distances.DistanceFromCall = &dfc
 		// presentable distance uses stopsFromCall unknown here; caller sets it when building lists
-		call.Extensions.Distances.PresentableDistance = internal.PresentableDistance(call.Extensions.Distances.StopsFromCall, dfc/1000, 0)
+		call.Extensions.Distances.PresentableDistance = utils.PresentableDistance(call.Extensions.Distances.StopsFromCall, dfc/1000, 0)
 	}
 	return call
 }

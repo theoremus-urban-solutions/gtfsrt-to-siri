@@ -14,7 +14,7 @@ import (
 func fetchFeed(url string) (*gtfsrtpb.FeedMessage, error) {
 	// basic retry with backoff and context timeout
 	var lastErr error
-	timeout := 5 * time.Second
+	timeout := 10 * time.Second
 	attempts := 3
 	for i := 0; i < attempts; i++ {
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)

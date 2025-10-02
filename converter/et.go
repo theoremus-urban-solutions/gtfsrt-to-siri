@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"mta/gtfsrt-to-siri/gtfsrt"
-	"mta/gtfsrt-to-siri/internal"
+	"mta/gtfsrt-to-siri/utils"
 	"mta/gtfsrt-to-siri/siri"
 )
 
@@ -30,12 +30,12 @@ func (c *Converter) BuildEstimatedTimetable() siri.EstimatedTimetable {
 	}
 
 	frame := siri.EstimatedJourneyVersionFrame{
-		RecordedAtTime:          internal.Iso8601ExtendedFromUnixSeconds(timestamp),
+		RecordedAtTime:          utils.Iso8601ExtendedFromUnixSeconds(timestamp),
 		EstimatedVehicleJourney: journeys,
 	}
 
 	return siri.EstimatedTimetable{
-		ResponseTimestamp:            internal.Iso8601ExtendedFromUnixSeconds(timestamp),
+		ResponseTimestamp:            utils.Iso8601ExtendedFromUnixSeconds(timestamp),
 		EstimatedJourneyVersionFrame: []siri.EstimatedJourneyVersionFrame{frame},
 	}
 }
@@ -59,7 +59,7 @@ func (c *Converter) buildEstimatedVehicleJourney(tripID string, now int64, agenc
 	// Build siri.FramedVehicleJourneyRef
 	dataFrameRef := startDate
 	if dataFrameRef == "" {
-		dataFrameRef = internal.Iso8601DateFromUnixSeconds(now)
+		dataFrameRef = utils.Iso8601DateFromUnixSeconds(now)
 	}
 	datedVehicleJourneyRef := agencyID + ":ServiceJourney:" + tripID
 
@@ -110,7 +110,7 @@ func (c *Converter) buildEstimatedVehicleJourney(tripID string, now int64, agenc
 	monitored := len(recordedCalls) > 0 && len(estimatedCalls) > 0
 
 	journey := &siri.EstimatedVehicleJourney{
-		RecordedAtTime: internal.Iso8601ExtendedFromUnixSeconds(now),
+		RecordedAtTime: utils.Iso8601ExtendedFromUnixSeconds(now),
 		LineRef:        agencyID + ":Line:" + routeID,
 		VehicleRef:     vehicleRef,
 		DirectionRef:   directionID,
@@ -191,18 +191,18 @@ func (c *Converter) buildCallSequence(tripID, gtfsLookupKey string, stopSequence
 
 			// Set aimed times from static GTFS
 			if staticArrival > 0 {
-				call.AimedArrivalTime = internal.Iso8601ExtendedFromUnixSeconds(staticArrival)
+				call.AimedArrivalTime = utils.Iso8601ExtendedFromUnixSeconds(staticArrival)
 			}
 			if staticDeparture > 0 {
-				call.AimedDepartureTime = internal.Iso8601ExtendedFromUnixSeconds(staticDeparture)
+				call.AimedDepartureTime = utils.Iso8601ExtendedFromUnixSeconds(staticDeparture)
 			}
 
 			// Set actual times from GTFS-RT
 			if rtArrival > 0 {
-				call.ActualArrivalTime = internal.Iso8601ExtendedFromUnixSeconds(rtArrival)
+				call.ActualArrivalTime = utils.Iso8601ExtendedFromUnixSeconds(rtArrival)
 			}
 			if rtDeparture > 0 {
-				call.ActualDepartureTime = internal.Iso8601ExtendedFromUnixSeconds(rtDeparture)
+				call.ActualDepartureTime = utils.Iso8601ExtendedFromUnixSeconds(rtDeparture)
 			}
 
 			recordedCalls = append(recordedCalls, call)
@@ -218,30 +218,30 @@ func (c *Converter) buildCallSequence(tripID, gtfsLookupKey string, stopSequence
 
 			// Set aimed times from static GTFS
 			if staticArrival > 0 {
-				call.AimedArrivalTime = internal.Iso8601ExtendedFromUnixSeconds(staticArrival)
+				call.AimedArrivalTime = utils.Iso8601ExtendedFromUnixSeconds(staticArrival)
 			}
 			if staticDeparture > 0 {
-				call.AimedDepartureTime = internal.Iso8601ExtendedFromUnixSeconds(staticDeparture)
+				call.AimedDepartureTime = utils.Iso8601ExtendedFromUnixSeconds(staticDeparture)
 			}
 
 			// Set expected times and status - use RT if available, otherwise fall back to static
 			if staticArrival > 0 {
 				if rtArrival > 0 {
-					call.ExpectedArrivalTime = internal.Iso8601ExtendedFromUnixSeconds(rtArrival)
+					call.ExpectedArrivalTime = utils.Iso8601ExtendedFromUnixSeconds(rtArrival)
 					call.ArrivalStatus = calculateStatus(rtArrival, staticArrival)
 				} else {
 					// No real-time data, use static time
-					call.ExpectedArrivalTime = internal.Iso8601ExtendedFromUnixSeconds(staticArrival)
+					call.ExpectedArrivalTime = utils.Iso8601ExtendedFromUnixSeconds(staticArrival)
 					call.ArrivalStatus = "onTime"
 				}
 			}
 			if staticDeparture > 0 {
 				if rtDeparture > 0 {
-					call.ExpectedDepartureTime = internal.Iso8601ExtendedFromUnixSeconds(rtDeparture)
+					call.ExpectedDepartureTime = utils.Iso8601ExtendedFromUnixSeconds(rtDeparture)
 					call.DepartureStatus = calculateStatus(rtDeparture, staticDeparture)
 				} else {
 					// No real-time data, use static time
-					call.ExpectedDepartureTime = internal.Iso8601ExtendedFromUnixSeconds(staticDeparture)
+					call.ExpectedDepartureTime = utils.Iso8601ExtendedFromUnixSeconds(staticDeparture)
 					call.DepartureStatus = "onTime"
 				}
 			}
