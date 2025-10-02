@@ -20,12 +20,13 @@ type GTFSRTWrapper struct {
 	vehicleTS       map[string]int64
 	headerTimestamp int64
 
-	tripRoute   map[string]string           // trip_id -> route_id
-	tripDir     map[string]string           // trip_id -> direction (string)
-	tripDate    map[string]string           // trip_id -> start_date (YYYYMMDD)
-	onwardStops map[string][]string         // trip_id -> ordered stop_ids
-	etaByStop   map[string]map[string]int64 // trip_id -> stop_id -> arrival epoch
-	etdByStop   map[string]map[string]int64 // trip_id -> stop_id -> departure epoch
+	tripRoute      map[string]string           // trip_id -> route_id
+	tripDir        map[string]string           // trip_id -> direction (string)
+	tripDate       map[string]string           // trip_id -> start_date (YYYYMMDD)
+	onwardStops    map[string][]string         // trip_id -> ordered stop_ids
+	etaByStop      map[string]map[string]int64 // trip_id -> stop_id -> arrival epoch
+	etdByStop      map[string]map[string]int64 // trip_id -> stop_id -> departure epoch
+	schedRelByStop map[string]map[string]int32 // trip_id -> stop_id -> schedule_relationship (0=SCHEDULED, 1=SKIPPED, etc.)
 
 	tripVehicleRef map[string]string  // trip_id -> vehicle id
 	tripLat        map[string]float64 // trip_id -> lat
@@ -61,6 +62,7 @@ func NewGTFSRTWrapper(tripUpdatesURL, vehiclePositionsURL, serviceAlertsURL stri
 		serviceAlertsURL:    serviceAlertsURL,
 		trips:               map[string]struct{}{},
 		vehicleTS:           map[string]int64{},
+		schedRelByStop:      map[string]map[string]int32{},
 		headerTimestamp:     time.Now().Unix(),
 		tripRoute:           map[string]string{},
 		tripDir:             map[string]string{},
@@ -88,6 +90,7 @@ func (w *GTFSRTWrapper) Refresh() error {
 	w.onwardStops = map[string][]string{}
 	w.etaByStop = map[string]map[string]int64{}
 	w.etdByStop = map[string]map[string]int64{}
+	w.schedRelByStop = map[string]map[string]int32{}
 	w.tripVehicleRef = map[string]string{}
 	w.tripLat = map[string]float64{}
 	w.tripLon = map[string]float64{}
@@ -125,6 +128,7 @@ func (w *GTFSRTWrapper) Refresh() error {
 						w.onwardStops[tripID] = make([]string, 0, len(e.TripUpdate.StopTimeUpdate))
 						w.etaByStop[tripID] = map[string]int64{}
 						w.etdByStop[tripID] = map[string]int64{}
+						w.schedRelByStop[tripID] = map[string]int32{}
 						for _, stu := range e.TripUpdate.StopTimeUpdate {
 							if stu.StopId == nil {
 								continue
@@ -136,6 +140,10 @@ func (w *GTFSRTWrapper) Refresh() error {
 							}
 							if stu.Departure != nil && stu.Departure.Time != nil {
 								w.etdByStop[tripID][sid] = int64(*stu.Departure.Time)
+							}
+							// Track schedule_relationship (0=SCHEDULED, 1=SKIPPED, 2=NO_DATA)
+							if stu.ScheduleRelationship != nil {
+								w.schedRelByStop[tripID][sid] = int32(*stu.ScheduleRelationship)
 							}
 						}
 					}
@@ -384,6 +392,14 @@ func (w *GTFSRTWrapper) GetVehicleLonForTrip(tripID string) (float64, bool) {
 func (w *GTFSRTWrapper) GetVehicleBearingForTrip(tripID string) (float64, bool) {
 	v, ok := w.tripBearing[tripID]
 	return v, ok
+}
+
+// GetScheduleRelationshipForStop returns the schedule_relationship for a stop (0=SCHEDULED, 1=SKIPPED, 2=NO_DATA)
+func (w *GTFSRTWrapper) GetScheduleRelationshipForStop(tripID, stopID string) int32 {
+	if m, ok := w.schedRelByStop[tripID]; ok {
+		return m[stopID]
+	}
+	return 0 // Default: SCHEDULED
 }
 
 // Alerts placeholders

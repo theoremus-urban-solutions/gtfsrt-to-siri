@@ -39,26 +39,35 @@ type GTFSIndex struct {
 	stopCoord       map[string][2]float64     // stop_id -> [lon,lat]
 	shapePoints     map[string][][2]float64   // shape_id -> ordered points [lon,lat]
 	shapeCumKM      map[string][]float64      // shape_id -> cumulative km at each point
+	// New fields for ET support
+	stopTimePickupType  map[string]map[string]int    // trip_id -> stop_id -> pickup_type
+	stopTimeDropOffType map[string]map[string]int    // trip_id -> stop_id -> drop_off_type
+	stopTimeArrival     map[string]map[string]string // trip_id -> stop_id -> arrival_time (HH:MM:SS)
+	stopTimeDeparture   map[string]map[string]string // trip_id -> stop_id -> departure_time (HH:MM:SS)
 }
 
 func NewGTFSIndex(indexedSchedulePath, indexedSpatialPath string) (*GTFSIndex, error) {
 	return &GTFSIndex{
-		routeShortNames: map[string]string{},
-		routeTypes:      map[string]int{},
-		routes:          map[string]struct{}{},
-		tripToRoute:     map[string]string{},
-		tripHeadsign:    map[string]string{},
-		tripOriginStop:  map[string]string{},
-		tripDestStop:    map[string]string{},
-		tripDirection:   map[string]string{},
-		tripShapeID:     map[string]string{},
-		tripBlockID:     map[string]string{},
-		tripStopSeq:     map[string][]string{},
-		tripStopIdx:     map[string]map[string]int{},
-		stopNames:       map[string]string{},
-		stopCoord:       map[string][2]float64{},
-		shapePoints:     map[string][][2]float64{},
-		shapeCumKM:      map[string][]float64{},
+		routeShortNames:     map[string]string{},
+		routeTypes:          map[string]int{},
+		routes:              map[string]struct{}{},
+		tripToRoute:         map[string]string{},
+		tripHeadsign:        map[string]string{},
+		tripOriginStop:      map[string]string{},
+		tripDestStop:        map[string]string{},
+		tripDirection:       map[string]string{},
+		tripShapeID:         map[string]string{},
+		tripBlockID:         map[string]string{},
+		tripStopSeq:         map[string][]string{},
+		tripStopIdx:         map[string]map[string]int{},
+		stopNames:           map[string]string{},
+		stopCoord:           map[string][2]float64{},
+		shapePoints:         map[string][][2]float64{},
+		shapeCumKM:          map[string][]float64{},
+		stopTimePickupType:  map[string]map[string]int{},
+		stopTimeDropOffType: map[string]map[string]int{},
+		stopTimeArrival:     map[string]map[string]string{},
+		stopTimeDeparture:   map[string]map[string]string{},
 	}, nil
 }
 
@@ -257,21 +266,49 @@ func (g *GTFSIndex) consumeCSV(f *zip.File) error {
 		tID := idx("trip_id")
 		sID := idx("stop_id")
 		sq := idx("stop_sequence")
+		arrTime := idx("arrival_time")
+		depTime := idx("departure_time")
+		pickupType := idx("pickup_type")
+		dropOffType := idx("drop_off_type")
 		if tID < 0 || sID < 0 || sq < 0 {
 			return nil
 		}
 		tmp := map[string][]struct {
-			stop string
-			seq  int
+			stop        string
+			seq         int
+			arrTime     string
+			depTime     string
+			pickupType  int
+			dropOffType int
 		}{}
 		for _, row := range rec[1:] {
 			trip := row[tID]
 			stop := row[sID]
 			seq, _ := strconv.Atoi(row[sq])
+			arrT := ""
+			if arrTime >= 0 && arrTime < len(row) {
+				arrT = row[arrTime]
+			}
+			depT := ""
+			if depTime >= 0 && depTime < len(row) {
+				depT = row[depTime]
+			}
+			pickup := 0
+			if pickupType >= 0 && pickupType < len(row) && row[pickupType] != "" {
+				pickup, _ = strconv.Atoi(row[pickupType])
+			}
+			dropOff := 0
+			if dropOffType >= 0 && dropOffType < len(row) && row[dropOffType] != "" {
+				dropOff, _ = strconv.Atoi(row[dropOffType])
+			}
 			tmp[trip] = append(tmp[trip], struct {
-				stop string
-				seq  int
-			}{stop, seq})
+				stop        string
+				seq         int
+				arrTime     string
+				depTime     string
+				pickupType  int
+				dropOffType int
+			}{stop, seq, arrT, depT, pickup, dropOff})
 		}
 		for trip, arr := range tmp {
 			sort.Slice(arr, func(i, j int) bool { return arr[i].seq < arr[j].seq })
@@ -280,13 +317,27 @@ func (g *GTFSIndex) consumeCSV(f *zip.File) error {
 				g.tripOriginStop[trip] = arr[0].stop
 				g.tripDestStop[trip] = arr[len(arr)-1].stop
 			}
-			// stop sequence + index map
+			// Initialize maps for this trip
+			g.stopTimePickupType[trip] = make(map[string]int)
+			g.stopTimeDropOffType[trip] = make(map[string]int)
+			g.stopTimeArrival[trip] = make(map[string]string)
+			g.stopTimeDeparture[trip] = make(map[string]string)
+			// stop sequence + index map + stop times data
 			seqStops := make([]string, 0, len(arr))
 			idxMap := make(map[string]int, len(arr))
 			for i, v := range arr {
 				seqStops = append(seqStops, v.stop)
 				if _, ok := idxMap[v.stop]; !ok {
 					idxMap[v.stop] = i
+				}
+				// Store pickup/dropoff types and times
+				g.stopTimePickupType[trip][v.stop] = v.pickupType
+				g.stopTimeDropOffType[trip][v.stop] = v.dropOffType
+				if v.arrTime != "" {
+					g.stopTimeArrival[trip][v.stop] = v.arrTime
+				}
+				if v.depTime != "" {
+					g.stopTimeDeparture[trip][v.stop] = v.depTime
 				}
 			}
 			g.tripStopSeq[trip] = seqStops
@@ -412,6 +463,38 @@ func (g *GTFSIndex) GetPreviousStopIDOfStopForTrip(gtfsTripKey, stopID string) s
 			}
 			return ""
 		}
+	}
+	return ""
+}
+
+// GetPickupType returns the pickup_type for a stop in a trip (0=regular, 1=none, 2=phone, 3=coordinate)
+func (g *GTFSIndex) GetPickupType(gtfsTripKey, stopID string) int {
+	if m, ok := g.stopTimePickupType[gtfsTripKey]; ok {
+		return m[stopID]
+	}
+	return 0 // Default: regular pickup
+}
+
+// GetDropOffType returns the drop_off_type for a stop in a trip (0=regular, 1=none, 2=phone, 3=coordinate)
+func (g *GTFSIndex) GetDropOffType(gtfsTripKey, stopID string) int {
+	if m, ok := g.stopTimeDropOffType[gtfsTripKey]; ok {
+		return m[stopID]
+	}
+	return 0 // Default: regular drop off
+}
+
+// GetArrivalTime returns the static arrival_time string (HH:MM:SS) for a stop in a trip
+func (g *GTFSIndex) GetArrivalTime(gtfsTripKey, stopID string) string {
+	if m, ok := g.stopTimeArrival[gtfsTripKey]; ok {
+		return m[stopID]
+	}
+	return ""
+}
+
+// GetDepartureTime returns the static departure_time string (HH:MM:SS) for a stop in a trip
+func (g *GTFSIndex) GetDepartureTime(gtfsTripKey, stopID string) string {
+	if m, ok := g.stopTimeDeparture[gtfsTripKey]; ok {
+		return m[stopID]
 	}
 	return ""
 }

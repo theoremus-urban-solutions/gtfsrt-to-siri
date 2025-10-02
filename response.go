@@ -315,6 +315,21 @@ func writeEstimatedTimetableXML(b *strings.Builder, et EstimatedTimetable) {
 						b.WriteString(xmlEscape(call.StopPointName))
 						b.WriteString("</StopPointName>")
 					}
+					// Always write Cancellation and RequestStop
+					b.WriteString("<Cancellation>")
+					if call.Cancellation {
+						b.WriteString("true")
+					} else {
+						b.WriteString("false")
+					}
+					b.WriteString("</Cancellation>")
+					b.WriteString("<RequestStop>")
+					if call.RequestStop {
+						b.WriteString("true")
+					} else {
+						b.WriteString("false")
+					}
+					b.WriteString("</RequestStop>")
 					if call.AimedArrivalTime != "" {
 						b.WriteString("<AimedArrivalTime>")
 						b.WriteString(xmlEscape(call.AimedArrivalTime))
@@ -359,6 +374,21 @@ func writeEstimatedTimetableXML(b *strings.Builder, et EstimatedTimetable) {
 						b.WriteString(xmlEscape(call.StopPointName))
 						b.WriteString("</StopPointName>")
 					}
+					// Always write Cancellation and RequestStop
+					b.WriteString("<Cancellation>")
+					if call.Cancellation {
+						b.WriteString("true")
+					} else {
+						b.WriteString("false")
+					}
+					b.WriteString("</Cancellation>")
+					b.WriteString("<RequestStop>")
+					if call.RequestStop {
+						b.WriteString("true")
+					} else {
+						b.WriteString("false")
+					}
+					b.WriteString("</RequestStop>")
 					if call.AimedArrivalTime != "" {
 						b.WriteString("<AimedArrivalTime>")
 						b.WriteString(xmlEscape(call.AimedArrivalTime))
