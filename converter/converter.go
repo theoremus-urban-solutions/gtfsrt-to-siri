@@ -35,11 +35,19 @@ func (c *Converter) GetCompleteVehicleMonitoringResponse() *siri.SiriResponse {
 		ValidUntil:        utils.ValidUntilFrom(timestamp, c.Cfg.GTFSRT.ReadIntervalMS),
 		VehicleActivity:   []siri.VehicleActivityEntry{},
 	}
-	// Minimal entry to make shape valid
-	vm.VehicleActivity = append(vm.VehicleActivity, siri.VehicleActivityEntry{
-		RecordedAtTime:          utils.Iso8601FromUnixSeconds(timestamp),
-		MonitoredVehicleJourney: c.buildMVJ(""),
-	})
+
+	// Get all monitored trips and build MVJ for each
+	trips := c.GTFSRT.GetAllMonitoredTrips()
+	for _, tripID := range trips {
+		mvj := c.buildMVJ(tripID)
+		tripTimestamp := c.GTFSRT.GetTimestampForTrip(tripID)
+		entry := siri.VehicleActivityEntry{
+			RecordedAtTime:          utils.Iso8601FromUnixSeconds(tripTimestamp),
+			ValidUntilTime:          utils.ValidUntilFrom(tripTimestamp, c.Cfg.GTFSRT.ReadIntervalMS),
+			MonitoredVehicleJourney: mvj,
+		}
+		vm.VehicleActivity = append(vm.VehicleActivity, entry)
+	}
 
 	// Use shared ServiceDelivery builder (note: formatter package would be better but causes circular dependency)
 	sd := siri.VehicleAndSituation{

@@ -29,6 +29,10 @@ type GTFSRTWrapper struct {
 	tripLon        map[string]float64 // trip_id -> lon
 	tripBearing    map[string]float64 // trip_id -> bearing
 
+	// Occupancy and congestion data
+	tripOccupancy  map[string]int32 // trip_id -> occupancy_status (from TripUpdate)
+	tripCongestion map[string]int32 // trip_id -> congestion_level (from VehiclePosition)
+
 	// Alerts data (parsed from GTFS-RT Alerts)
 	alerts        []RTAlert
 	alertsByRoute map[string][]int // route_id -> indices in alerts slice
@@ -56,6 +60,8 @@ func NewGTFSRTWrapper(tripUpdatesURL, vehiclePositionsURL, serviceAlertsURL stri
 		tripLat:             map[string]float64{},
 		tripLon:             map[string]float64{},
 		tripBearing:         map[string]float64{},
+		tripOccupancy:       map[string]int32{},
+		tripCongestion:      map[string]int32{},
 		alerts:              []RTAlert{},
 		alertsByRoute:       map[string][]int{},
 		alertsByStop:        map[string][]int{},
@@ -107,6 +113,7 @@ func (w *GTFSRTWrapper) Refresh() error {
 					if e.TripUpdate.Vehicle != nil && e.TripUpdate.Vehicle.Id != nil {
 						w.tripVehicleRef[tripID] = *e.TripUpdate.Vehicle.Id
 					}
+					// Note: Occupancy status is extracted from VehiclePosition feed, not TripUpdate
 					if len(e.TripUpdate.StopTimeUpdate) > 0 {
 						w.onwardStops[tripID] = make([]string, 0, len(e.TripUpdate.StopTimeUpdate))
 						w.etaByStop[tripID] = map[string]int64{}
@@ -166,6 +173,14 @@ func (w *GTFSRTWrapper) Refresh() error {
 						if e.Vehicle.Position.Bearing != nil {
 							w.tripBearing[tripID] = float64(*e.Vehicle.Position.Bearing)
 						}
+					}
+					// Extract congestion level from VehiclePosition
+					if e.Vehicle.CongestionLevel != nil && tripID != "" {
+						w.tripCongestion[tripID] = int32(*e.Vehicle.CongestionLevel)
+					}
+					// Extract occupancy status from VehiclePosition
+					if e.Vehicle.OccupancyStatus != nil && tripID != "" {
+						w.tripOccupancy[tripID] = int32(*e.Vehicle.OccupancyStatus)
 					}
 					if e.Vehicle.Timestamp != nil && tripID != "" {
 						w.vehicleTS[tripID] = int64(*e.Vehicle.Timestamp)
@@ -357,6 +372,22 @@ func (w *GTFSRTWrapper) GetScheduleRelationshipForStop(tripID, stopID string) in
 		return m[stopID]
 	}
 	return 0 // Default: SCHEDULED
+}
+
+// GetOccupancyStatusForTrip returns the occupancy_status from TripUpdate (0-8, -1 if not available)
+func (w *GTFSRTWrapper) GetOccupancyStatusForTrip(tripID string) int32 {
+	if status, ok := w.tripOccupancy[tripID]; ok {
+		return status
+	}
+	return -1 // Not available
+}
+
+// GetCongestionLevelForTrip returns the congestion_level from VehiclePosition (0-4, -1 if not available)
+func (w *GTFSRTWrapper) GetCongestionLevelForTrip(tripID string) int32 {
+	if level, ok := w.tripCongestion[tripID]; ok {
+		return level
+	}
+	return -1 // Not available
 }
 
 // Alerts placeholders

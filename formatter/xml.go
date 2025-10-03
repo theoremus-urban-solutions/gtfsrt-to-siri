@@ -60,6 +60,11 @@ func writeVehicleMonitoringXML(b *strings.Builder, vm siri.VehicleMonitoring) {
 			b.WriteString(xmlEscape(va.RecordedAtTime))
 			b.WriteString("</RecordedAtTime>")
 		}
+		if va.ValidUntilTime != "" {
+			b.WriteString("<ValidUntilTime>")
+			b.WriteString(xmlEscape(va.ValidUntilTime))
+			b.WriteString("</ValidUntilTime>")
+		}
 		writeMVJXML(b, va.MonitoredVehicleJourney)
 		b.WriteString("</VehicleActivity>")
 	}
@@ -99,11 +104,13 @@ func writeMVJXML(b *strings.Builder, mvj siri.MonitoredVehicleJourney) {
 		}
 		b.WriteString("</FramedVehicleJourneyRef>")
 	}
-	if mvj.JourneyPatternRef != "" {
-		b.WriteString("<JourneyPatternRef>")
-		b.WriteString(xmlEscape(mvj.JourneyPatternRef))
-		b.WriteString("</JourneyPatternRef>")
+	// VehicleMode (right after FramedVehicleJourneyRef)
+	if mvj.VehicleMode != "" {
+		b.WriteString("<VehicleMode>")
+		b.WriteString(xmlEscape(mvj.VehicleMode))
+		b.WriteString("</VehicleMode>")
 	}
+	// JourneyPatternRef - REMOVED for VM spec compliance (not in Entur spec)
 	if mvj.PublishedLineName != "" {
 		b.WriteString("<PublishedLineName>")
 		b.WriteString(xmlEscape(mvj.PublishedLineName))
@@ -118,6 +125,11 @@ func writeMVJXML(b *strings.Builder, mvj siri.MonitoredVehicleJourney) {
 		b.WriteString("<OriginRef>")
 		b.WriteString(xmlEscape(mvj.OriginRef))
 		b.WriteString("</OriginRef>")
+	}
+	if mvj.OriginName != "" {
+		b.WriteString("<OriginName>")
+		b.WriteString(xmlEscape(mvj.OriginName))
+		b.WriteString("</OriginName>")
 	}
 	if mvj.DestinationRef != "" {
 		b.WriteString("<DestinationRef>")
@@ -141,6 +153,22 @@ func writeMVJXML(b *strings.Builder, mvj siri.MonitoredVehicleJourney) {
 		b.WriteString("false")
 	}
 	b.WriteString("</Monitored>")
+	// InCongestion (placed right above DataSource)
+	if mvj.InCongestion != nil {
+		b.WriteString("<InCongestion>")
+		if *mvj.InCongestion {
+			b.WriteString("true")
+		} else {
+			b.WriteString("false")
+		}
+		b.WriteString("</InCongestion>")
+	}
+	// DataSource (SIRI-VM spec: required)
+	if mvj.DataSource != "" {
+		b.WriteString("<DataSource>")
+		b.WriteString(xmlEscape(mvj.DataSource))
+		b.WriteString("</DataSource>")
+	}
 	if loc, ok := mvj.VehicleLocation.(siri.VehicleLocation); ok {
 		if loc.Latitude != nil || loc.Longitude != nil {
 			b.WriteString("<VehicleLocation>")
@@ -162,12 +190,60 @@ func writeMVJXML(b *strings.Builder, mvj siri.MonitoredVehicleJourney) {
 		b.WriteString(strconv.FormatFloat(*mvj.Bearing, 'f', 2, 64))
 		b.WriteString("</Bearing>")
 	}
+	// Occupancy (placed right above Delay)
+	if mvj.Occupancy != "" {
+		b.WriteString("<Occupancy>")
+		b.WriteString(xmlEscape(mvj.Occupancy))
+		b.WriteString("</Occupancy>")
+	}
+	// Delay (SIRI-VM spec: required)
+	if mvj.Delay != "" {
+		b.WriteString("<Delay>")
+		b.WriteString(xmlEscape(mvj.Delay))
+		b.WriteString("</Delay>")
+	}
 	if mvj.VehicleRef != "" {
 		b.WriteString("<VehicleRef>")
 		b.WriteString(xmlEscape(mvj.VehicleRef))
 		b.WriteString("</VehicleRef>")
 	}
-	writeOnwardCallsXML(b, mvj.OnwardCalls)
+	// MonitoredCall (SIRI-VM spec: current/previous stop only)
+	if mvj.MonitoredCall != nil {
+		b.WriteString("<MonitoredCall>")
+		b.WriteString("<StopPointRef>")
+		b.WriteString(xmlEscape(mvj.MonitoredCall.StopPointRef))
+		b.WriteString("</StopPointRef>")
+		if mvj.MonitoredCall.Order != nil {
+			b.WriteString("<Order>")
+			b.WriteString(strconv.Itoa(*mvj.MonitoredCall.Order))
+			b.WriteString("</Order>")
+		}
+		if mvj.MonitoredCall.StopPointName != "" {
+			b.WriteString("<StopPointName>")
+			b.WriteString(xmlEscape(mvj.MonitoredCall.StopPointName))
+			b.WriteString("</StopPointName>")
+		}
+		if mvj.MonitoredCall.VehicleAtStop != nil {
+			b.WriteString("<VehicleAtStop>")
+			if *mvj.MonitoredCall.VehicleAtStop {
+				b.WriteString("true")
+			} else {
+				b.WriteString("false")
+			}
+			b.WriteString("</VehicleAtStop>")
+		}
+		b.WriteString("</MonitoredCall>")
+	}
+	// IsCompleteStopSequence (SIRI-VM spec: required, always false)
+	b.WriteString("<IsCompleteStopSequence>")
+	if mvj.IsCompleteStopSequence {
+		b.WriteString("true")
+	} else {
+		b.WriteString("false")
+	}
+	b.WriteString("</IsCompleteStopSequence>")
+	// OnwardCalls - REMOVED for VM spec compliance (belongs in ET)
+	// writeOnwardCallsXML(b, mvj.OnwardCalls)
 	b.WriteString("</MonitoredVehicleJourney>")
 }
 
@@ -283,11 +359,7 @@ func writeEstimatedTimetableXML(b *strings.Builder, et siri.EstimatedTimetable) 
 				b.WriteString(xmlEscape(journey.DataSource))
 				b.WriteString("</DataSource>")
 			}
-			if journey.VehicleRef != "" {
-				b.WriteString("<VehicleRef>")
-				b.WriteString(xmlEscape(journey.VehicleRef))
-				b.WriteString("</VehicleRef>")
-			}
+			// VehicleRef - REMOVED from ET (only in VM per spec)
 			// RecordedCalls
 			if len(journey.RecordedCalls) > 0 {
 				b.WriteString("<RecordedCalls>")
