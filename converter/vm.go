@@ -1,6 +1,7 @@
 package converter
 
 import (
+	"math"
 	"mta/gtfsrt-to-siri/gtfsrt"
 	"mta/gtfsrt-to-siri/siri"
 	"mta/gtfsrt-to-siri/utils"
@@ -159,61 +160,6 @@ func (c *Converter) CfGDatedVehicleJourneyRef(tripKey, agency string) string {
 	return c.GTFS.GetFullTripIDForTrip(tripKey)
 }
 
-// buildOnwardCalls builds OnwardCalls with optional max limit
-func (c *Converter) buildOnwardCalls(tripID string, maxOnward int) any {
-	stops := c.GTFSRT.GetOnwardStopIDsForTrip(tripID)
-	if len(stops) == 0 {
-		return nil
-	}
-	limit := len(stops)
-	if maxOnward >= 0 && maxOnward < limit {
-		limit = maxOnward
-	}
-	// Base distances
-	agency := c.Cfg.GTFS.AgencyID
-	startDate := c.GTFSRT.GetStartDateForTrip(tripID)
-	tripKey := gtfsrt.TripKeyForConverter(tripID, agency, startDate)
-
-	calls := make([]siri.SiriCall, 0, limit)
-	// compute vehicle distance and next-stop distance for presentable distance tuning
-	vehKMOverall := c.Snap.GetVehicleDistanceAlongRouteInKilometers(tripKey)
-	nextStopDistKM := 0.0
-	if len(stops) > 0 && !isNaN(vehKMOverall) {
-		nextStopDistKM = c.GTFS.GetStopDistanceAlongRouteForTripInKilometers(tripKey, stops[0]) - vehKMOverall
-		if nextStopDistKM < 0 {
-			nextStopDistKM = 0
-		}
-	}
-	// fill calls and distances
-	for i := 0; i < limit && i < len(stops); i++ {
-		sid := stops[i]
-		call := c.buildCall(tripID, sid)
-		call.StopPointRef = applyFieldMutators(sid, c.Cfg.Converter.FieldMutators.StopPointRef)
-		call.StopPointName = c.GTFS.GetStopName(sid)
-		if eta := c.GTFSRT.GetExpectedArrivalTimeAtStopForTrip(tripID, sid); eta > 0 {
-			call.ExpectedArrivalTime = utils.Iso8601FromUnixSeconds(eta)
-		}
-		if etd := c.GTFSRT.GetExpectedDepartureTimeAtStopForTrip(tripID, sid); etd > 0 {
-			call.ExpectedDepartureTime = utils.Iso8601FromUnixSeconds(etd)
-		}
-		// Distances along route
-		callDistKM := c.GTFS.GetStopDistanceAlongRouteForTripInKilometers(tripKey, sid)
-		call.Extensions.Distances.StopsFromCall = i
-		// per config rounding
-		call.Extensions.Distances.CallDistanceAlongRoute = roundTo(callDistKM*1000, c.Cfg.Converter.CallDistanceAlongRouteNumDigits)
-		// vehicle position distance from snapshot
-		vehKM := vehKMOverall
-		if !isNaN(vehKM) {
-			dfc := (callDistKM - vehKM) * 1000
-			call.Extensions.Distances.DistanceFromCall = &dfc
-			// presentable distance: use distance to current call and distance to immediate next stop
-			call.Extensions.Distances.PresentableDistance = utils.PresentableDistance(i, callDistKM-vehKM, nextStopDistKM)
-		}
-		calls = append(calls, call)
-	}
-	return map[string]any{"OnwardCall": calls}
-}
-
 // applyFieldMutators applies [from,to] pairs to a reference value
 func applyFieldMutators(value string, mapping []string) string {
 	if len(mapping) < 2 {
@@ -338,10 +284,7 @@ func (c *Converter) buildMonitoredCall(tripID string) *siri.MonitoredCall {
 	stopKM := c.GTFS.GetStopDistanceAlongRouteForTripInKilometers(tripKey, currentStopID)
 	distanceToStop := (stopKM - vehKM) * 1000 // meters
 
-	vehicleAtStop := false
-	if !isNaN(vehKM) && distanceToStop >= -50 && distanceToStop <= 50 {
-		vehicleAtStop = true
-	}
+	vehicleAtStop := !math.IsNaN(vehKM) && distanceToStop >= -50 && distanceToStop <= 50
 
 	stopName := c.GTFS.GetStopName(currentStopID)
 

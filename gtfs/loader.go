@@ -3,8 +3,6 @@ package gtfs
 import (
 	"archive/zip"
 	"encoding/csv"
-	"encoding/json"
-	"errors"
 	"io"
 	"net/http"
 	"os"
@@ -21,12 +19,12 @@ func (g *GTFSIndex) loadFromStaticZip(urlOrPath string) error {
 		if err != nil {
 			return err
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 		tmp, err := os.CreateTemp("", "gtfs-*.zip")
 		if err != nil {
 			return err
 		}
-		defer os.Remove(tmp.Name())
+		defer func() { _ = os.Remove(tmp.Name()) }()
 		if _, err := io.Copy(tmp, resp.Body); err != nil {
 			return err
 		}
@@ -46,7 +44,7 @@ func (g *GTFSIndex) loadFromLocalZip(path string) error {
 	if err != nil {
 		return err
 	}
-	defer zr.Close()
+	defer func() { _ = zr.Close() }()
 	for _, f := range zr.File {
 		name := strings.ToLower(f.Name)
 		if name == "routes.txt" || name == "trips.txt" || name == "stops.txt" || name == "stop_times.txt" || name == "agency.txt" || name == "shapes.txt" {
@@ -62,55 +60,13 @@ func (g *GTFSIndex) loadFromLocalZip(path string) error {
 }
 
 // Utility converters for flexible JSON values
-func toStringFallback(v any, fallback string) string {
-	switch t := v.(type) {
-	case string:
-		if t != "" {
-			return t
-		}
-	case float64:
-		return strconv.Itoa(int(t))
-	case json.Number:
-		if i, err := strconv.Atoi(t.String()); err == nil {
-			return strconv.Itoa(i)
-		}
-	}
-	return fallback
-}
-
-func toFloat(v any) (float64, error) {
-	switch t := v.(type) {
-	case float64:
-		return t, nil
-	case string:
-		return strconv.ParseFloat(t, 64)
-	case json.Number:
-		return t.Float64()
-	default:
-		return 0, errors.New("not a float")
-	}
-}
-
-func toInt(v any) (int, error) {
-	switch t := v.(type) {
-	case float64:
-		return int(t), nil
-	case string:
-		return strconv.Atoi(t)
-	case json.Number:
-		i64, err := t.Int64()
-		return int(i64), err
-	default:
-		return 0, errors.New("not an int")
-	}
-}
 
 func (g *GTFSIndex) consumeCSV(f *zip.File) error {
 	r, err := f.Open()
 	if err != nil {
 		return err
 	}
-	defer r.Close()
+	defer func() { _ = r.Close() }()
 	csvr := csv.NewReader(r)
 	rec, err := csvr.ReadAll()
 	if err != nil {
@@ -310,10 +266,4 @@ func (g *GTFSIndex) consumeCSV(f *zip.File) error {
 		}
 	}
 	return nil
-}
-
-// dumpDebugJSON is optionally used for debugging loaded data
-func (g *GTFSIndex) dumpDebugJSON(v any) []byte {
-	b, _ := json.Marshal(v)
-	return b
 }

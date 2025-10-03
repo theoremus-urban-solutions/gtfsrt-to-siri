@@ -28,7 +28,7 @@ func fetchFeed(url string) (*gtfsrtpb.FeedMessage, error) {
 			continue
 		}
 		b, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		cancel()
 		if err != nil {
 			lastErr = err

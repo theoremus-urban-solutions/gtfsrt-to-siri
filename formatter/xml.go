@@ -247,42 +247,6 @@ func writeMVJXML(b *strings.Builder, mvj siri.MonitoredVehicleJourney) {
 	b.WriteString("</MonitoredVehicleJourney>")
 }
 
-func writeOnwardCallsXML(b *strings.Builder, oc any) {
-	if oc == nil {
-		return
-	}
-	m, ok := oc.(map[string]any)
-	if !ok {
-		return
-	}
-	val, ok := m["OnwardCall"]
-	if !ok {
-		return
-	}
-	switch list := val.(type) {
-	case []siri.SiriCall:
-		if len(list) == 0 {
-			return
-		}
-		b.WriteString("<OnwardCalls>")
-		for _, c := range list {
-			writeCallXML(b, "OnwardCall", c)
-		}
-		b.WriteString("</OnwardCalls>")
-	case []any:
-		if len(list) == 0 {
-			return
-		}
-		b.WriteString("<OnwardCalls>")
-		for _, v := range list {
-			if c, ok := v.(siri.SiriCall); ok {
-				writeCallXML(b, "OnwardCall", c)
-			}
-		}
-		b.WriteString("</OnwardCalls>")
-	}
-}
-
 func writeEstimatedTimetableXML(b *strings.Builder, et siri.EstimatedTimetable) {
 	b.WriteString("<EstimatedTimetableDelivery>")
 	if et.ResponseTimestamp != "" {
@@ -502,55 +466,7 @@ func writeEstimatedTimetableXML(b *strings.Builder, et siri.EstimatedTimetable) 
 	b.WriteString("</EstimatedTimetableDelivery>")
 }
 
-func writeCallXML(b *strings.Builder, tag string, c siri.SiriCall) {
-	b.WriteString("<" + tag + ">")
-	if c.ExpectedArrivalTime != "" {
-		b.WriteString("<ExpectedArrivalTime>")
-		b.WriteString(xmlEscape(c.ExpectedArrivalTime))
-		b.WriteString("</ExpectedArrivalTime>")
-	}
-	if c.ExpectedDepartureTime != "" {
-		b.WriteString("<ExpectedDepartureTime>")
-		b.WriteString(xmlEscape(c.ExpectedDepartureTime))
-		b.WriteString("</ExpectedDepartureTime>")
-	}
-	if c.StopPointRef != "" {
-		b.WriteString("<StopPointRef>")
-		b.WriteString(xmlEscape(c.StopPointRef))
-		b.WriteString("</StopPointRef>")
-	}
-	if c.StopPointName != "" {
-		b.WriteString("<StopPointName>")
-		b.WriteString(xmlEscape(c.StopPointName))
-		b.WriteString("</StopPointName>")
-	}
-	b.WriteString("<VisitNumber>")
-	b.WriteString(strconv.Itoa(c.VisitNumber))
-	b.WriteString("</VisitNumber>")
-	// Extensions
-	b.WriteString("<Extensions><Distances>")
-	if c.Extensions.Distances.PresentableDistance != "" {
-		b.WriteString("<PresentableDistance>")
-		b.WriteString(xmlEscape(c.Extensions.Distances.PresentableDistance))
-		b.WriteString("</PresentableDistance>")
-	}
-	if c.Extensions.Distances.DistanceFromCall != nil {
-		b.WriteString("<DistanceFromCall>")
-		b.WriteString(strconv.FormatFloat(*c.Extensions.Distances.DistanceFromCall, 'f', -1, 64))
-		b.WriteString("</DistanceFromCall>")
-	}
-	b.WriteString("<StopsFromCall>")
-	b.WriteString(strconv.Itoa(c.Extensions.Distances.StopsFromCall))
-	b.WriteString("</StopsFromCall>")
-	b.WriteString("<CallDistanceAlongRoute>")
-	b.WriteString(strconv.FormatFloat(c.Extensions.Distances.CallDistanceAlongRoute, 'f', -1, 64))
-	b.WriteString("</CallDistanceAlongRoute>")
-	b.WriteString("</Distances></Extensions>")
-	b.WriteString("</" + tag + ">")
-}
-
 func writeSituationExchangeXML(b *strings.Builder, sx siri.SituationExchange) {
-	// Expect sx.Situations to be []siri.PtSituationElement
 	list, ok := sx.Situations.([]siri.PtSituationElement)
 	if !ok {
 		// nothing to write

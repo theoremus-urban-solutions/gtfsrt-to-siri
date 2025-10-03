@@ -17,7 +17,7 @@ func TestConfig_LoadFromFile(t *testing.T) {
 	origDir, _ := os.Getwd()
 	defer func() {
 		config.Config = origConfig
-		os.Chdir(origDir)
+		_ = os.Chdir(origDir)
 	}()
 
 	// Change to project root
@@ -45,7 +45,7 @@ func TestConfig_MissingFile(t *testing.T) {
 	origDir, _ := os.Getwd()
 	defer func() {
 		config.Config = origConfig
-		os.Chdir(origDir)
+		_ = os.Chdir(origDir)
 	}()
 
 	// Change to temp directory with no config
@@ -70,7 +70,7 @@ func TestConfig_InvalidYAML(t *testing.T) {
 	origDir, _ := os.Getwd()
 	defer func() {
 		config.Config = origConfig
-		os.Chdir(origDir)
+		_ = os.Chdir(origDir)
 	}()
 
 	// Create temp directory with invalid YAML
@@ -103,7 +103,7 @@ func TestConfig_EmptyFile(t *testing.T) {
 	origDir, _ := os.Getwd()
 	defer func() {
 		config.Config = origConfig
-		os.Chdir(origDir)
+		_ = os.Chdir(origDir)
 	}()
 
 	tmpDir := t.TempDir()

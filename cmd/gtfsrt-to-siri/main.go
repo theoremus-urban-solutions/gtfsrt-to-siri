@@ -84,7 +84,8 @@ func main() {
 		var buf []byte
 		codespace := config.Config.GTFS.AgencyID
 
-		if *call == "et" {
+		switch *call {
+		case "et":
 			et := conv.BuildEstimatedTimetable()
 			// Apply filters if provided
 			if *monitoringRef != "" || *lineRef != "" || *directionRef != "" {
@@ -97,14 +98,14 @@ func main() {
 			} else {
 				buf = rb.BuildJSON(resp)
 			}
-		} else if *call == "vm" {
+		case "vm":
 			resp := conv.GetCompleteVehicleMonitoringResponse()
 			if strings.ToLower(*format) == "xml" {
 				buf = rb.BuildXML(resp)
 			} else {
 				buf = rb.BuildJSON(resp)
 			}
-		} else if *call == "sx" {
+		case "sx":
 			sx := conv.BuildSituationExchange()
 			timestamp := rt.GetTimestampForFeedMessage()
 			resp := formatter.WrapSituationExchangeResponse(sx, timestamp, codespace)

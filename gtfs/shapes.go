@@ -98,18 +98,6 @@ func cumulativeKM(pts [][2]float64) []float64 {
 	return cum
 }
 
-func nearestPointIndex(pts [][2]float64, coord [2]float64) int {
-	best := -1
-	bestD := math.MaxFloat64
-	for i, p := range pts {
-		d := HasversineKM(coord[1], coord[0], p[1], p[0])
-		if d < bestD {
-			bestD = d
-			best = i
-		}
-	}
-	return best
-}
 
 // nearestSegmentProjection finds the segment index i (between pts[i] and pts[i+1])
 // that is closest to the given coordinate, and returns the clamped projection
