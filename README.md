@@ -1,7 +1,6 @@
 # GTFS-Realtime to SIRI Converter
 
-Convert GTFS-Realtime feeds (Trip Updates, Vehicle Positions, Service Alerts) to SIRI format (VM, ET, SX).
-Config is loaded by default with Sofia's GTFS feed.
+A lightweight library for transforming GTFS-Realtime transit data into SIRI (Standard Interface for Realtime Information) format. The implementation follows Entur's latest public specification.
 
 **Features:**
 - **On-demand conversion** – No caching layer; designed for integration into larger systems
@@ -11,7 +10,7 @@ Config is loaded by default with Sofia's GTFS feed.
 
 ## Acknowledgments
 
-Inspired by and adapted from MTA's [GTFS-Realtime to SIRI Converter](https://github.com/availabs/MTA_Subway_GTFS-Realtime_to_SIRI_Converter). Core conversion logic and SIRI structure design drew from their implementation.
+This implementation follows [Entur's Nordic SIRI Profile](https://enturas.atlassian.net/wiki/spaces/PUBLIC/pages/637370373/) specification. Initial project structure was inspired by MTA's [GTFS-Realtime to SIRI Converter](https://github.com/availabs/MTA_Subway_GTFS-Realtime_to_SIRI_Converter).
 
 ## Installation
 
