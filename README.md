@@ -125,8 +125,8 @@ type Converter struct {
 
 // Build responses
 func (c *Converter) BuildVehicleMonitoring() []VehicleActivity
-func (c *Converter) BuildStopMonitoring(query *Query) []MonitoredStopVisit
-func (c *Converter) BuildSituationExchange() SituationExchange
+func (c *Converter) BuildEstimatedTimetable() EstimatedTimetable
+func (c *Converter) BuildSituationExchange() []PtSituationElement
 ```
 
 **ConverterCache**
@@ -138,7 +138,7 @@ type ConverterCache struct {
 
 // Generate formatted responses (XML/JSON)
 func (cc *ConverterCache) GetVehicleMonitoringResponse(params map[string]string, format string) ([]byte, error)
-func (cc *ConverterCache) GetStopMonitoringResponse(params map[string]string, format string) ([]byte, error)
+func (cc *ConverterCache) GetEstimatedTimetableResponse(params map[string]string, format string) ([]byte, error)
 func (cc *ConverterCache) GetSituationExchangeResponse(format string) ([]byte, error)
 ```
 
@@ -168,7 +168,7 @@ converter:
 ## SIRI Modules
 
 - **VM (Vehicle Monitoring)**: Real-time vehicle positions and trip progress
-- **SM (Stop Monitoring)**: Upcoming arrivals/departures at specific stops
+- **ET (Estimated Timetable)**: Stop-level arrival/departure predictions for routes
 - **SX (Situation Exchange)**: Service alerts and disruptions
 
 ## References
