@@ -4,6 +4,8 @@ import (
 	"time"
 
 	"mta/gtfsrt-to-siri/config"
+
+	gtfsrtpb "github.com/MobilityData/gtfs-realtime-bindings/golang/gtfs"
 )
 
 // GTFSRTWrapper stores GTFS-Realtime data in memory for fast lookups
@@ -69,6 +71,41 @@ func NewGTFSRTWrapper(tripUpdatesURL, vehiclePositionsURL, serviceAlertsURL stri
 	}
 }
 
+// RefreshFromFeeds populates the wrapper from already-parsed FeedMessage objects
+// Useful for testing with local protobuf files
+func (w *GTFSRTWrapper) RefreshFromFeeds(vpFeed, tuFeed, saFeed *gtfsrtpb.FeedMessage) error {
+	w.trips = map[string]struct{}{}
+	w.vehicleTS = map[string]int64{}
+	w.tripRoute = map[string]string{}
+	w.tripDir = map[string]string{}
+	w.tripDate = map[string]string{}
+	w.onwardStops = map[string][]string{}
+	w.etaByStop = map[string]map[string]int64{}
+	w.etdByStop = map[string]map[string]int64{}
+	w.schedRelByStop = map[string]map[string]int32{}
+	w.tripVehicleRef = map[string]string{}
+	w.tripLat = map[string]float64{}
+	w.tripLon = map[string]float64{}
+	w.tripBearing = map[string]float64{}
+	w.tripOccupancy = map[string]int32{}
+	w.tripCongestion = map[string]int32{}
+	w.alerts = []RTAlert{}
+	w.alertsByRoute = map[string][]int{}
+	w.alertsByStop = map[string][]int{}
+	w.alertsByTrip = map[string][]int{}
+	w.headerTimestamp = 0
+
+	// Process each feed
+	w.parseTripUpdatesFeed(tuFeed)
+	w.parseVehiclePositionsFeed(vpFeed)
+	w.parseServiceAlertsFeed(saFeed)
+
+	if w.headerTimestamp == 0 {
+		w.headerTimestamp = time.Now().Unix()
+	}
+	return nil
+}
+
 // Refresh fetches and parses all GTFS-RT feeds
 func (w *GTFSRTWrapper) Refresh() error {
 	w.trips = map[string]struct{}{}
@@ -84,184 +121,31 @@ func (w *GTFSRTWrapper) Refresh() error {
 	w.tripLat = map[string]float64{}
 	w.tripLon = map[string]float64{}
 	w.tripBearing = map[string]float64{}
+	w.tripOccupancy = map[string]int32{}
+	w.tripCongestion = map[string]int32{}
 	w.alerts = []RTAlert{}
 	w.alertsByRoute = map[string][]int{}
 	w.alertsByStop = map[string][]int{}
 	w.alertsByTrip = map[string][]int{}
 	w.headerTimestamp = 0
+
+	// Fetch and parse each feed
 	if w.tripUpdatesURL != "" {
 		if fm, err := fetchFeed(w.tripUpdatesURL); err == nil && fm != nil {
-			if fm.Header != nil && fm.Header.Timestamp != nil {
-				if ts := int64(*fm.Header.Timestamp); ts > w.headerTimestamp {
-					w.headerTimestamp = ts
-				}
-			}
-			for _, e := range fm.Entity {
-				if e.TripUpdate != nil && e.TripUpdate.Trip != nil && e.TripUpdate.Trip.TripId != nil {
-					tripID := *e.TripUpdate.Trip.TripId
-					w.trips[tripID] = struct{}{}
-					if e.TripUpdate.Trip.RouteId != nil {
-						w.tripRoute[tripID] = *e.TripUpdate.Trip.RouteId
-					}
-					if e.TripUpdate.Trip.DirectionId != nil {
-						w.tripDir[tripID] = string(rune(*e.TripUpdate.Trip.DirectionId + '0'))
-					}
-					if e.TripUpdate.Trip.StartDate != nil {
-						w.tripDate[tripID] = *e.TripUpdate.Trip.StartDate
-					}
-					// Extract vehicle ID from TripUpdate if present
-					if e.TripUpdate.Vehicle != nil && e.TripUpdate.Vehicle.Id != nil {
-						w.tripVehicleRef[tripID] = *e.TripUpdate.Vehicle.Id
-					}
-					// Note: Occupancy status is extracted from VehiclePosition feed, not TripUpdate
-					if len(e.TripUpdate.StopTimeUpdate) > 0 {
-						w.onwardStops[tripID] = make([]string, 0, len(e.TripUpdate.StopTimeUpdate))
-						w.etaByStop[tripID] = map[string]int64{}
-						w.etdByStop[tripID] = map[string]int64{}
-						w.schedRelByStop[tripID] = map[string]int32{}
-						for _, stu := range e.TripUpdate.StopTimeUpdate {
-							if stu.StopId == nil {
-								continue
-							}
-							sid := *stu.StopId
-							w.onwardStops[tripID] = append(w.onwardStops[tripID], sid)
-							if stu.Arrival != nil && stu.Arrival.Time != nil {
-								w.etaByStop[tripID][sid] = int64(*stu.Arrival.Time)
-							}
-							if stu.Departure != nil && stu.Departure.Time != nil {
-								w.etdByStop[tripID][sid] = int64(*stu.Departure.Time)
-							}
-							// Track schedule_relationship (0=SCHEDULED, 1=SKIPPED, 2=NO_DATA)
-							if stu.ScheduleRelationship != nil {
-								w.schedRelByStop[tripID][sid] = int32(*stu.ScheduleRelationship)
-							}
-						}
-					}
-				}
-			}
+			w.parseTripUpdatesFeed(fm)
 		}
 	}
 	if w.vehiclePositionsURL != "" {
 		if fm, err := fetchFeed(w.vehiclePositionsURL); err == nil && fm != nil {
-			if fm.Header != nil && fm.Header.Timestamp != nil {
-				if ts := int64(*fm.Header.Timestamp); ts > w.headerTimestamp {
-					w.headerTimestamp = ts
-				}
-			}
-			for _, e := range fm.Entity {
-				if e.Vehicle != nil {
-					var tripID string
-					if e.Vehicle.Trip != nil && e.Vehicle.Trip.TripId != nil {
-						tripID = *e.Vehicle.Trip.TripId
-					}
-					if tripID != "" {
-						w.trips[tripID] = struct{}{}
-					}
-					// Only set VehicleRef from vehicle-positions if not already set from trip-updates
-					if e.Vehicle.Vehicle != nil && e.Vehicle.Vehicle.Id != nil && tripID != "" {
-						if _, exists := w.tripVehicleRef[tripID]; !exists {
-							w.tripVehicleRef[tripID] = *e.Vehicle.Vehicle.Id
-						}
-					}
-					if e.Vehicle.Position != nil && tripID != "" {
-						if e.Vehicle.Position.Latitude != nil {
-							w.tripLat[tripID] = float64(*e.Vehicle.Position.Latitude)
-						}
-						if e.Vehicle.Position.Longitude != nil {
-							w.tripLon[tripID] = float64(*e.Vehicle.Position.Longitude)
-						}
-						if e.Vehicle.Position.Bearing != nil {
-							w.tripBearing[tripID] = float64(*e.Vehicle.Position.Bearing)
-						}
-					}
-					// Extract congestion level from VehiclePosition
-					if e.Vehicle.CongestionLevel != nil && tripID != "" {
-						w.tripCongestion[tripID] = int32(*e.Vehicle.CongestionLevel)
-					}
-					// Extract occupancy status from VehiclePosition
-					if e.Vehicle.OccupancyStatus != nil && tripID != "" {
-						w.tripOccupancy[tripID] = int32(*e.Vehicle.OccupancyStatus)
-					}
-					if e.Vehicle.Timestamp != nil && tripID != "" {
-						w.vehicleTS[tripID] = int64(*e.Vehicle.Timestamp)
-					}
-				}
-			}
+			w.parseVehiclePositionsFeed(fm)
 		}
 	}
-	// Alerts feed (optional)
 	if w.serviceAlertsURL != "" {
 		if fm, err := fetchFeed(w.serviceAlertsURL); err == nil && fm != nil {
-			if fm.Header != nil && fm.Header.Timestamp != nil {
-				if ts := int64(*fm.Header.Timestamp); ts > w.headerTimestamp {
-					w.headerTimestamp = ts
-				}
-			}
-			// Parse alerts
-			for _, e := range fm.Entity {
-				if e.Alert == nil {
-					continue
-				}
-				a := e.Alert
-				ra := RTAlert{}
-				if e.Id != nil {
-					ra.ID = *e.Id
-				}
-				if a.HeaderText != nil {
-					ra.Header = translatedStringToText(a.HeaderText)
-				}
-				if a.DescriptionText != nil {
-					ra.Description = translatedStringToText(a.DescriptionText)
-				}
-				if a.Cause != nil {
-					ra.Cause = a.Cause.String()
-				}
-				if a.Effect != nil {
-					ra.Effect = a.Effect.String()
-				}
-				if a.SeverityLevel != nil {
-					ra.Severity = a.SeverityLevel.String()
-				}
-				// ActivePeriod: pick the first window (or the widest)
-				if len(a.ActivePeriod) > 0 {
-					ap := a.ActivePeriod[0]
-					if ap.Start != nil {
-						ra.Start = int64(*ap.Start)
-					}
-					if ap.End != nil {
-						ra.End = int64(*ap.End)
-					}
-				}
-				// Informed entities
-				for _, ie := range a.InformedEntity {
-					if ie.RouteId != nil {
-						rid := *ie.RouteId
-						ra.RouteIDs = append(ra.RouteIDs, rid)
-					}
-					if ie.Trip != nil && ie.Trip.TripId != nil {
-						tid := *ie.Trip.TripId
-						ra.TripIDs = append(ra.TripIDs, tid)
-					}
-					if ie.StopId != nil {
-						sid := *ie.StopId
-						ra.StopIDs = append(ra.StopIDs, sid)
-					}
-				}
-				// Append alert and index mappings
-				idx := len(w.alerts)
-				w.alerts = append(w.alerts, ra)
-				for _, rid := range ra.RouteIDs {
-					w.alertsByRoute[rid] = append(w.alertsByRoute[rid], idx)
-				}
-				for _, sid := range ra.StopIDs {
-					w.alertsByStop[sid] = append(w.alertsByStop[sid], idx)
-				}
-				for _, tid := range ra.TripIDs {
-					w.alertsByTrip[tid] = append(w.alertsByTrip[tid], idx)
-				}
-			}
+			w.parseServiceAlertsFeed(fm)
 		}
 	}
+
 	if w.headerTimestamp == 0 {
 		w.headerTimestamp = time.Now().Unix()
 	}
@@ -410,3 +294,173 @@ func (w *GTFSRTWrapper) GetAlerts() []RTAlert                        { return w.
 func (w *GTFSRTWrapper) GetAlertIndicesByRoute(routeID string) []int { return w.alertsByRoute[routeID] }
 func (w *GTFSRTWrapper) GetAlertIndicesByStop(stopID string) []int   { return w.alertsByStop[stopID] }
 func (w *GTFSRTWrapper) GetAlertIndicesByTrip(tripID string) []int   { return w.alertsByTrip[tripID] }
+
+// Internal parsing methods
+
+func (w *GTFSRTWrapper) parseTripUpdatesFeed(fm *gtfsrtpb.FeedMessage) {
+	if fm == nil {
+		return
+	}
+	if fm.Header != nil && fm.Header.Timestamp != nil {
+		if ts := int64(*fm.Header.Timestamp); ts > w.headerTimestamp {
+			w.headerTimestamp = ts
+		}
+	}
+	for _, e := range fm.Entity {
+		if e.TripUpdate != nil && e.TripUpdate.Trip != nil && e.TripUpdate.Trip.TripId != nil {
+			tripID := *e.TripUpdate.Trip.TripId
+			w.trips[tripID] = struct{}{}
+			if e.TripUpdate.Trip.RouteId != nil {
+				w.tripRoute[tripID] = *e.TripUpdate.Trip.RouteId
+			}
+			if e.TripUpdate.Trip.DirectionId != nil {
+				w.tripDir[tripID] = string(rune(*e.TripUpdate.Trip.DirectionId + '0'))
+			}
+			if e.TripUpdate.Trip.StartDate != nil {
+				w.tripDate[tripID] = *e.TripUpdate.Trip.StartDate
+			}
+			if e.TripUpdate.Vehicle != nil && e.TripUpdate.Vehicle.Id != nil {
+				w.tripVehicleRef[tripID] = *e.TripUpdate.Vehicle.Id
+			}
+			if len(e.TripUpdate.StopTimeUpdate) > 0 {
+				w.onwardStops[tripID] = make([]string, 0, len(e.TripUpdate.StopTimeUpdate))
+				w.etaByStop[tripID] = map[string]int64{}
+				w.etdByStop[tripID] = map[string]int64{}
+				w.schedRelByStop[tripID] = map[string]int32{}
+				for _, stu := range e.TripUpdate.StopTimeUpdate {
+					if stu.StopId == nil {
+						continue
+					}
+					sid := *stu.StopId
+					w.onwardStops[tripID] = append(w.onwardStops[tripID], sid)
+					if stu.Arrival != nil && stu.Arrival.Time != nil {
+						w.etaByStop[tripID][sid] = int64(*stu.Arrival.Time)
+					}
+					if stu.Departure != nil && stu.Departure.Time != nil {
+						w.etdByStop[tripID][sid] = int64(*stu.Departure.Time)
+					}
+					if stu.ScheduleRelationship != nil {
+						w.schedRelByStop[tripID][sid] = int32(*stu.ScheduleRelationship)
+					}
+				}
+			}
+		}
+	}
+}
+
+func (w *GTFSRTWrapper) parseVehiclePositionsFeed(fm *gtfsrtpb.FeedMessage) {
+	if fm == nil {
+		return
+	}
+	if fm.Header != nil && fm.Header.Timestamp != nil {
+		if ts := int64(*fm.Header.Timestamp); ts > w.headerTimestamp {
+			w.headerTimestamp = ts
+		}
+	}
+	for _, e := range fm.Entity {
+		if e.Vehicle != nil {
+			var tripID string
+			if e.Vehicle.Trip != nil && e.Vehicle.Trip.TripId != nil {
+				tripID = *e.Vehicle.Trip.TripId
+			}
+			if tripID != "" {
+				w.trips[tripID] = struct{}{}
+			}
+			if e.Vehicle.Vehicle != nil && e.Vehicle.Vehicle.Id != nil && tripID != "" {
+				if _, exists := w.tripVehicleRef[tripID]; !exists {
+					w.tripVehicleRef[tripID] = *e.Vehicle.Vehicle.Id
+				}
+			}
+			if e.Vehicle.Position != nil && tripID != "" {
+				if e.Vehicle.Position.Latitude != nil {
+					w.tripLat[tripID] = float64(*e.Vehicle.Position.Latitude)
+				}
+				if e.Vehicle.Position.Longitude != nil {
+					w.tripLon[tripID] = float64(*e.Vehicle.Position.Longitude)
+				}
+				if e.Vehicle.Position.Bearing != nil {
+					w.tripBearing[tripID] = float64(*e.Vehicle.Position.Bearing)
+				}
+			}
+			if e.Vehicle.CongestionLevel != nil && tripID != "" {
+				w.tripCongestion[tripID] = int32(*e.Vehicle.CongestionLevel)
+			}
+			if e.Vehicle.OccupancyStatus != nil && tripID != "" {
+				w.tripOccupancy[tripID] = int32(*e.Vehicle.OccupancyStatus)
+			}
+			if e.Vehicle.Timestamp != nil && tripID != "" {
+				w.vehicleTS[tripID] = int64(*e.Vehicle.Timestamp)
+			}
+		}
+	}
+}
+
+func (w *GTFSRTWrapper) parseServiceAlertsFeed(fm *gtfsrtpb.FeedMessage) {
+	if fm == nil {
+		return
+	}
+	if fm.Header != nil && fm.Header.Timestamp != nil {
+		if ts := int64(*fm.Header.Timestamp); ts > w.headerTimestamp {
+			w.headerTimestamp = ts
+		}
+	}
+	for _, e := range fm.Entity {
+		if e.Alert == nil {
+			continue
+		}
+		a := e.Alert
+		ra := RTAlert{}
+		if e.Id != nil {
+			ra.ID = *e.Id
+		}
+		if a.HeaderText != nil {
+			ra.Header = translatedStringToText(a.HeaderText)
+		}
+		if a.DescriptionText != nil {
+			ra.Description = translatedStringToText(a.DescriptionText)
+		}
+		if a.Cause != nil {
+			ra.Cause = a.Cause.String()
+		}
+		if a.Effect != nil {
+			ra.Effect = a.Effect.String()
+		}
+		if a.SeverityLevel != nil {
+			ra.Severity = a.SeverityLevel.String()
+		}
+		if len(a.ActivePeriod) > 0 {
+			ap := a.ActivePeriod[0]
+			if ap.Start != nil {
+				ra.Start = int64(*ap.Start)
+			}
+			if ap.End != nil {
+				ra.End = int64(*ap.End)
+			}
+		}
+		for _, ie := range a.InformedEntity {
+			if ie.RouteId != nil {
+				rid := *ie.RouteId
+				ra.RouteIDs = append(ra.RouteIDs, rid)
+			}
+			if ie.Trip != nil && ie.Trip.TripId != nil {
+				tid := *ie.Trip.TripId
+				ra.TripIDs = append(ra.TripIDs, tid)
+			}
+			if ie.StopId != nil {
+				sid := *ie.StopId
+				ra.StopIDs = append(ra.StopIDs, sid)
+			}
+		}
+		idx := len(w.alerts)
+		w.alerts = append(w.alerts, ra)
+		for _, rid := range ra.RouteIDs {
+			w.alertsByRoute[rid] = append(w.alertsByRoute[rid], idx)
+		}
+		for _, sid := range ra.StopIDs {
+			w.alertsByStop[sid] = append(w.alertsByStop[sid], idx)
+		}
+		for _, tid := range ra.TripIDs {
+			w.alertsByTrip[tid] = append(w.alertsByTrip[tid], idx)
+		}
+	}
+}

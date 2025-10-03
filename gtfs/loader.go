@@ -13,41 +13,31 @@ import (
 	"strings"
 )
 
-func (g *GTFSIndex) loadFromStaticZip(url string) error {
-	resp, err := http.Get(url)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	tmp, err := os.CreateTemp("", "gtfs-*.zip")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(tmp.Name())
-	if _, err := io.Copy(tmp, resp.Body); err != nil {
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	zr, err := zip.OpenReader(tmp.Name())
-	if err != nil {
-		return err
-	}
-	defer zr.Close()
-	for _, f := range zr.File {
-		name := strings.ToLower(f.Name)
-		if name == "routes.txt" || name == "trips.txt" || name == "stops.txt" || name == "stop_times.txt" || name == "agency.txt" || name == "shapes.txt" {
-			if err := g.consumeCSV(f); err != nil {
-				return err
-			}
+func (g *GTFSIndex) loadFromStaticZip(urlOrPath string) error {
+	// Check if it's a local file path or a URL
+	if strings.HasPrefix(urlOrPath, "http://") || strings.HasPrefix(urlOrPath, "https://") {
+		// Handle as URL
+		resp, err := http.Get(urlOrPath)
+		if err != nil {
+			return err
 		}
+		defer resp.Body.Close()
+		tmp, err := os.CreateTemp("", "gtfs-*.zip")
+		if err != nil {
+			return err
+		}
+		defer os.Remove(tmp.Name())
+		if _, err := io.Copy(tmp, resp.Body); err != nil {
+			return err
+		}
+		if err := tmp.Close(); err != nil {
+			return err
+		}
+		return g.loadFromLocalZip(tmp.Name())
 	}
-	// After shapes ingested, compute cumulative distances
-	for shapeID, pts := range g.ShapePoints {
-		g.ShapeCumKM[shapeID] = cumulativeKM(pts)
-	}
-	return nil
+
+	// Handle as local file path
+	return g.loadFromLocalZip(urlOrPath)
 }
 
 // loadFromLocalZip opens a local GTFS zip file and consumes required CSVs.

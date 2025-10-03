@@ -1,0 +1,22 @@
+gtfs:
+  agency_id: "SOFIA"
+  url: "../testdata/gtfs/sofia-static.zip"
+
+feeds:
+  - name: "test"
+    gtfsrt:
+      trip_updates: ""
+      vehicle_positions: ""
+      service_alerts: ""
+
+converter:
+  call_distance_along_route_num_digits: 2
+  trip_key_strategy: raw
+  field_mutators:
+    stop_point_ref:
+      - type: "prefix"
+        value: "SOFIA:"
+    line_ref:
+      - type: "prefix"
+        value: "SOFIA:"
+

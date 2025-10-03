@@ -1,17 +1,24 @@
 # build artifacts
 cmd/gtfsrt-to-siri/gtfsrt-to-siri
+bin/
+gtfsrt-to-siri
 
 # indexes / outputs
 indexedScheduleData.json
 indexedSpatialData.json
 
+# test coverage
+*.out
+coverage.html
+
 # vendor/cache
 *.tmp
 *.log
 .DS_Store
+
+# legacy/deprecated
 docs
 out
-
 gtfs-to-siri
 http-server
 snapshots/

@@ -142,6 +142,29 @@ func (cc *ConverterCache) GetEstimatedTimetableResponse(params map[string]string
 func (cc *ConverterCache) GetSituationExchangeResponse(format string) ([]byte, error)
 ```
 
+## Testing
+
+Run the test suite:
+```bash
+# All tests
+go test ./tests/...
+
+# Unit tests only
+go test ./tests/unit -v
+
+# Integration tests only
+go test ./tests/integration -v
+```
+
+The test suite includes:
+- **68 tests** (25 integration + 43 unit) covering all critical packages
+- **67.1% code coverage** (converter: 76%, formatter: ~75%, gtfsrt: 72%, gtfs: 66%, utils: 80%)
+- **Real-world data** from Sofia Public Transport (1,237 vehicles)
+- **Critical regression tests** for VehicleMode, delay calculation, and start_date handling
+- **GitHub Actions CI/CD** with automated testing and coverage tracking
+
+See [docs/TESTING_IMPLEMENTATION_COMPLETE.md](docs/TESTING_IMPLEMENTATION_COMPLETE.md) and [docs/CODE_COVERAGE.md](docs/CODE_COVERAGE.md) for detailed reports.
+
 ## Configuration
 
 Edit `config.yml`:
