@@ -4,11 +4,11 @@ import (
 	"strings"
 	"testing"
 
-	"mta/gtfsrt-to-siri/config"
-	"mta/gtfsrt-to-siri/converter"
-	"mta/gtfsrt-to-siri/gtfs"
-	"mta/gtfsrt-to-siri/gtfsrt"
-	"mta/gtfsrt-to-siri/siri"
+	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/config"
+	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/converter"
+	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/gtfs"
+	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/gtfsrt"
+	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/siri"
 )
 
 // TestConverter_BuildCall tests the buildCall function indirectly through ET

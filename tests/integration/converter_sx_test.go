@@ -3,9 +3,9 @@ package integration
 import (
 	"testing"
 
-	"mta/gtfsrt-to-siri/converter"
-	"mta/gtfsrt-to-siri/siri"
-	"mta/gtfsrt-to-siri/tests/helpers"
+	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/converter"
+	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/siri"
+	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/tests/helpers"
 )
 
 // Test SituationExchange conversion

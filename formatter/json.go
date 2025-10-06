@@ -3,7 +3,7 @@ package formatter
 import (
 	"encoding/json"
 
-	"mta/gtfsrt-to-siri/siri"
+	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/siri"
 )
 
 type responseBuilder struct{}

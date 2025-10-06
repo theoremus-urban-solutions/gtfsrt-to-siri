@@ -16,11 +16,11 @@
 // Basic setup:
 //
 //	import (
-//	    "mta/gtfsrt-to-siri/config"
-//	    "mta/gtfsrt-to-siri/converter"
-//	    "mta/gtfsrt-to-siri/formatter"
-//	    "mta/gtfsrt-to-siri/gtfs"
-//	    "mta/gtfsrt-to-siri/gtfsrt"
+//	    "github.com/theoremus-urban-solutions/gtfsrt-to-siri/config"
+//	    "github.com/theoremus-urban-solutions/gtfsrt-to-siri/converter"
+//	    "github.com/theoremus-urban-solutions/gtfsrt-to-siri/formatter"
+//	    "github.com/theoremus-urban-solutions/gtfsrt-to-siri/gtfs"
+//	    "github.com/theoremus-urban-solutions/gtfsrt-to-siri/gtfsrt"
 //	)
 //
 //	// Load configuration

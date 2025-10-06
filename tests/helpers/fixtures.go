@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"mta/gtfsrt-to-siri/config"
-	"mta/gtfsrt-to-siri/gtfs"
+	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/config"
+	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/gtfs"
 )
 
 // GetTestDataPath returns absolute path to testdata/

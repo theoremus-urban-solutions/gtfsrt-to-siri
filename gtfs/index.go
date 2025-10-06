@@ -1,7 +1,7 @@
 package gtfs
 
 import (
-	"mta/gtfsrt-to-siri/config"
+	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/config"
 )
 
 // GTFSIndex stores GTFS static data in memory for fast lookups

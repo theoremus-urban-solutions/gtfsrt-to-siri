@@ -4,8 +4,8 @@ import (
 	"strings"
 	"time"
 
-	"mta/gtfsrt-to-siri/siri"
-	"mta/gtfsrt-to-siri/utils"
+	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/siri"
+	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/utils"
 )
 
 // BuildServiceDelivery creates a standardized ServiceDelivery wrapper

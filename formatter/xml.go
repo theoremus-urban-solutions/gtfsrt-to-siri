@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"strings"
 
-	"mta/gtfsrt-to-siri/siri"
+	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/siri"
 )
 
 // BuildXML serializes a SIRI response to XML

@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"mta/gtfsrt-to-siri/config"
+	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/config"
 
 	"gopkg.in/yaml.v3"
 )

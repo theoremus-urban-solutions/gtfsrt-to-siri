@@ -1,9 +1,9 @@
 package converter
 
 import (
-	"mta/gtfsrt-to-siri/gtfsrt"
-	"mta/gtfsrt-to-siri/utils"
-	"mta/gtfsrt-to-siri/siri"
+	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/gtfsrt"
+	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/siri"
+	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/utils"
 )
 
 func (c *Converter) BuildSituationExchange() siri.SituationExchange {

@@ -1,4 +1,4 @@
-module mta/gtfsrt-to-siri
+module github.com/theoremus-urban-solutions/gtfsrt-to-siri
 
 go 1.23
 

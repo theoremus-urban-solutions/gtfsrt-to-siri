@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"mta/gtfsrt-to-siri/utils"
+	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/utils"
 )
 
 func TestIso8601Now(t *testing.T) {

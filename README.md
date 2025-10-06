@@ -61,7 +61,7 @@ go build -o gtfsrt-to-siri ./cmd/gtfsrt-to-siri/
 
 ```go
 import (
-    gtfsrtsiri "mta/gtfsrt-to-siri"
+    gtfsrtsiri "github.com/theoremus-urban-solutions/gtfsrt-to-siri"
 )
 
 // Load configuration

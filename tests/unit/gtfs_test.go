@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"mta/gtfsrt-to-siri/tests/helpers"
+	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/tests/helpers"
 )
 
 func TestGTFSIndex_LoadsSofiaData(t *testing.T) {

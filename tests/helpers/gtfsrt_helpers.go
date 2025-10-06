@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"mta/gtfsrt-to-siri/gtfsrt"
+	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/gtfsrt"
 
 	gtfsrtpb "github.com/MobilityData/gtfs-realtime-bindings/golang/gtfs"
 	"google.golang.org/protobuf/proto"

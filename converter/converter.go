@@ -3,12 +3,12 @@ package converter
 import (
 	"encoding/json"
 
-	"mta/gtfsrt-to-siri/config"
-	"mta/gtfsrt-to-siri/gtfs"
-	"mta/gtfsrt-to-siri/gtfsrt"
-	"mta/gtfsrt-to-siri/siri"
-	"mta/gtfsrt-to-siri/tracking"
-	"mta/gtfsrt-to-siri/utils"
+	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/config"
+	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/gtfs"
+	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/gtfsrt"
+	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/siri"
+	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/tracking"
+	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/utils"
 )
 
 // Converter coordinates GTFS, GTFS-RT, and configuration to produce SIRI responses

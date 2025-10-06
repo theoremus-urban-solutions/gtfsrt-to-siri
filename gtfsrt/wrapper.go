@@ -3,7 +3,7 @@ package gtfsrt
 import (
 	"time"
 
-	"mta/gtfsrt-to-siri/config"
+	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/config"
 
 	gtfsrtpb "github.com/MobilityData/gtfs-realtime-bindings/golang/gtfs"
 )

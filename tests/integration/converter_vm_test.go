@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"mta/gtfsrt-to-siri/converter"
-	"mta/gtfsrt-to-siri/tests/helpers"
+	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/converter"
+	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/tests/helpers"
 )
 
 // Test VehicleMonitoring conversion with Sofia data
