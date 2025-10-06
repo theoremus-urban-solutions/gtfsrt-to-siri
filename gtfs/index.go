@@ -1,10 +1,8 @@
 package gtfs
 
-import (
-	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/config"
-)
-
-// GTFSIndex stores GTFS static data in memory for fast lookups
+// GTFSIndex stores GTFS static data in memory for fast lookups.
+// This index is data-source agnostic - it accepts raw zip data
+// and does NOT handle HTTP downloads or file paths.
 type GTFSIndex struct {
 	agencyID        string
 	agencyTZ        string
@@ -25,50 +23,11 @@ type GTFSIndex struct {
 	stopCoord       map[string][2]float64     // stop_id -> [lon,lat]
 	ShapePoints     map[string][][2]float64   // shape_id -> ordered points [lon,lat]
 	ShapeCumKM      map[string][]float64      // shape_id -> cumulative km at each point
-	// New fields for ET support
+	// Fields for ET support
 	stopTimePickupType  map[string]map[string]int    // trip_id -> stop_id -> pickup_type
 	stopTimeDropOffType map[string]map[string]int    // trip_id -> stop_id -> drop_off_type
 	stopTimeArrival     map[string]map[string]string // trip_id -> stop_id -> arrival_time (HH:MM:SS)
 	stopTimeDeparture   map[string]map[string]string // trip_id -> stop_id -> departure_time (HH:MM:SS)
-}
-
-// NewGTFSIndex creates a new empty GTFS index
-func NewGTFSIndex(indexedSchedulePath, indexedSpatialPath string) (*GTFSIndex, error) {
-	return &GTFSIndex{
-		routeShortNames:     map[string]string{},
-		routeTypes:          map[string]int{},
-		routes:              map[string]struct{}{},
-		tripToRoute:         map[string]string{},
-		tripHeadsign:        map[string]string{},
-		tripOriginStop:      map[string]string{},
-		tripDestStop:        map[string]string{},
-		tripDirection:       map[string]string{},
-		tripShapeID:         map[string]string{},
-		tripBlockID:         map[string]string{},
-		TripStopSeq:         map[string][]string{},
-		tripStopIdx:         map[string]map[string]int{},
-		stopNames:           map[string]string{},
-		stopCoord:           map[string][2]float64{},
-		ShapePoints:         map[string][][2]float64{},
-		ShapeCumKM:          map[string][]float64{},
-		stopTimePickupType:  map[string]map[string]int{},
-		stopTimeDropOffType: map[string]map[string]int{},
-		stopTimeArrival:     map[string]map[string]string{},
-		stopTimeDeparture:   map[string]map[string]string{},
-	}, nil
-}
-
-// NewGTFSIndexFromConfig creates and loads a GTFS index from configuration
-func NewGTFSIndexFromConfig(cfg config.GTFSConfig) (*GTFSIndex, error) {
-	g, _ := NewGTFSIndex("", "")
-	g.agencyID = cfg.AgencyID
-	if cfg.StaticURL != "" {
-		if err := g.loadFromStaticZip(cfg.StaticURL); err != nil {
-			return g, err
-		}
-		return g, nil
-	}
-	return g, nil
 }
 
 // Accessor methods

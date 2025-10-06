@@ -11,15 +11,15 @@ import (
 
 // BuildEstimatedTimetable converts GTFS-RT data to SIRI ET format
 func (c *Converter) BuildEstimatedTimetable() siri.EstimatedTimetable {
-	timestamp := c.GTFSRT.GetTimestampForFeedMessage()
+	timestamp := c.gtfsrt.GetTimestampForFeedMessage()
 	now := timestamp
-	agencyID := c.Cfg.GTFS.AgencyID
+	agencyID := c.opts.AgencyID
 	if agencyID == "" {
 		agencyID = "UNKNOWN"
 	}
 
 	// Get all active trips from GTFS-RT
-	allTrips := c.GTFSRT.GetAllMonitoredTrips()
+	allTrips := c.gtfsrt.GetAllMonitoredTrips()
 	journeys := make([]siri.EstimatedVehicleJourney, 0, len(allTrips))
 
 	for _, tripID := range allTrips {
@@ -42,18 +42,18 @@ func (c *Converter) BuildEstimatedTimetable() siri.EstimatedTimetable {
 
 func (c *Converter) buildEstimatedVehicleJourney(tripID string, now int64, agencyID string) *siri.EstimatedVehicleJourney {
 	// Get route and direction
-	routeID := c.GTFSRT.GetRouteIDForTrip(tripID)
+	routeID := c.gtfsrt.GetRouteIDForTrip(tripID)
 	if routeID == "" {
 		return nil
 	}
 
-	directionID := c.GTFSRT.GetRouteDirectionForTrip(tripID)
+	directionID := c.gtfsrt.GetRouteDirectionForTrip(tripID)
 	if directionID == "" {
 		directionID = "0"
 	}
 
 	// Get trip key
-	startDate := c.GTFSRT.GetStartDateForTrip(tripID)
+	startDate := c.gtfsrt.GetStartDateForTrip(tripID)
 	tripKey := gtfsrt.TripKeyForConverter(tripID, agencyID, startDate)
 
 	// Build siri.FramedVehicleJourneyRef
@@ -65,18 +65,18 @@ func (c *Converter) buildEstimatedVehicleJourney(tripID string, now int64, agenc
 
 	// Get vehicle ref if available and format as {codespace}:VehicleRef:{vehicle_id}
 	vehicleRef := ""
-	if rawVehicleID := c.GTFSRT.GetVehicleRefForTrip(tripID); rawVehicleID != "" {
+	if rawVehicleID := c.gtfsrt.GetVehicleRefForTrip(tripID); rawVehicleID != "" {
 		vehicleRef = agencyID + ":VehicleRef:" + rawVehicleID
 	}
 
 	// Get complete stop sequence from GTFS static
 	// Determine which key to use for static GTFS lookups
 	gtfsLookupKey := tripKey
-	stopSequence := c.GTFS.TripStopSeq[gtfsLookupKey]
+	stopSequence := c.gtfs.TripStopSeq[gtfsLookupKey]
 	if len(stopSequence) == 0 {
 		// Try with just trip_id if agency-prefixed key doesn't work
 		gtfsLookupKey = tripID
-		stopSequence = c.GTFS.TripStopSeq[gtfsLookupKey]
+		stopSequence = c.gtfs.TripStopSeq[gtfsLookupKey]
 	}
 
 	if len(stopSequence) == 0 {
@@ -88,7 +88,7 @@ func (c *Converter) buildEstimatedVehicleJourney(tripID string, now int64, agenc
 
 	// Get VehicleMode from route_type
 	vehicleMode := ""
-	if routeType := c.GTFS.GetRouteType(routeID); routeType > 0 {
+	if routeType := c.gtfs.GetRouteType(routeID); routeType > 0 {
 		vehicleMode = mapGTFSRouteTypeToSIRIVehicleMode(routeType)
 	}
 
@@ -96,13 +96,13 @@ func (c *Converter) buildEstimatedVehicleJourney(tripID string, now int64, agenc
 	originName := ""
 	destinationName := ""
 	if len(stopSequence) > 0 {
-		originName = c.GTFS.GetStopName(stopSequence[0])
-		destinationName = c.GTFS.GetStopName(stopSequence[len(stopSequence)-1])
+		originName = c.gtfs.GetStopName(stopSequence[0])
+		destinationName = c.gtfs.GetStopName(stopSequence[len(stopSequence)-1])
 	}
 
 	// OperatorRef from agency_name
 	operatorRef := agencyID
-	if agencyName := c.GTFS.GetAgencyName(); agencyName != "" {
+	if agencyName := c.gtfs.GetAgencyName(); agencyName != "" {
 		operatorRef = agencyID + ":Operator:" + agencyName
 	}
 
@@ -135,13 +135,13 @@ func (c *Converter) buildEstimatedVehicleJourney(tripID string, now int64, agenc
 func (c *Converter) buildCallSequence(tripID, gtfsLookupKey string, stopSequence []string, now int64) ([]siri.RecordedCall, []siri.EstimatedCall) {
 	recordedCalls := []siri.RecordedCall{}
 	estimatedCalls := []siri.EstimatedCall{}
-	agencyID := c.Cfg.GTFS.AgencyID
+	agencyID := c.opts.AgencyID
 	if agencyID == "" {
 		agencyID = "UNKNOWN"
 	}
 
 	// Get start_date for time conversion
-	startDate := c.GTFSRT.GetStartDateForTrip(tripID)
+	startDate := c.gtfsrt.GetStartDateForTrip(tripID)
 	// If no start_date from GTFS-RT, use today's date
 	if startDate == "" {
 		startDate = time.Unix(now, 0).Format("20060102")
@@ -149,12 +149,12 @@ func (c *Converter) buildCallSequence(tripID, gtfsLookupKey string, stopSequence
 
 	for order, stopID := range stopSequence {
 		// Get real-time arrival/departure times
-		rtArrival := c.GTFSRT.GetExpectedArrivalTimeAtStopForTrip(tripID, stopID)
-		rtDeparture := c.GTFSRT.GetExpectedDepartureTimeAtStopForTrip(tripID, stopID)
+		rtArrival := c.gtfsrt.GetExpectedArrivalTimeAtStopForTrip(tripID, stopID)
+		rtDeparture := c.gtfsrt.GetExpectedDepartureTimeAtStopForTrip(tripID, stopID)
 
 		// Get static GTFS times using gtfsLookupKey (the key that successfully found stopSequence)
-		staticArrival := gtfsTimeToUnixTimestamp(c.GTFS.GetArrivalTime(gtfsLookupKey, stopID), startDate)
-		staticDeparture := gtfsTimeToUnixTimestamp(c.GTFS.GetDepartureTime(gtfsLookupKey, stopID), startDate)
+		staticArrival := gtfsTimeToUnixTimestamp(c.gtfs.GetArrivalTime(gtfsLookupKey, stopID), startDate)
+		staticDeparture := gtfsTimeToUnixTimestamp(c.gtfs.GetDepartureTime(gtfsLookupKey, stopID), startDate)
 
 		// Determine if this is a past or future stop
 		isPastStop := false
@@ -165,18 +165,18 @@ func (c *Converter) buildCallSequence(tripID, gtfsLookupKey string, stopSequence
 		}
 
 		// Get stop name
-		stopName := c.GTFS.GetStopName(stopID)
+		stopName := c.gtfs.GetStopName(stopID)
 
 		// Format StopPointRef as {codespace}:Quay:{stop_id}, then apply field mutators
-		stopPointRef := applyFieldMutators(agencyID+":Quay:"+stopID, c.Cfg.Converter.FieldMutators.StopPointRef)
+		stopPointRef := applyFieldMutators(agencyID+":Quay:"+stopID, c.opts.FieldMutators.StopPointRef)
 
 		// Check if cancelled (schedule_relationship = 1 SKIPPED)
-		schedRel := c.GTFSRT.GetScheduleRelationshipForStop(tripID, stopID)
+		schedRel := c.gtfsrt.GetScheduleRelationshipForStop(tripID, stopID)
 		isCancelled := schedRel == 1
 
 		// Check if request stop (pickup_type or drop_off_type = 2 or 3) using gtfsLookupKey
-		pickupType := c.GTFS.GetPickupType(gtfsLookupKey, stopID)
-		dropOffType := c.GTFS.GetDropOffType(gtfsLookupKey, stopID)
+		pickupType := c.gtfs.GetPickupType(gtfsLookupKey, stopID)
+		dropOffType := c.gtfs.GetDropOffType(gtfsLookupKey, stopID)
 		isRequestStop := pickupType == 2 || pickupType == 3 || dropOffType == 2 || dropOffType == 3
 
 		if isPastStop {

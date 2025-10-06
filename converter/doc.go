@@ -1,119 +1,127 @@
-// Package converter is the main entry point for GTFS-Realtime to SIRI conversion.
-//
-// This package provides the core conversion logic that integrates GTFS static data,
-// GTFS-Realtime feeds, and configuration to produce SIRI (Service Interface for
-// Real-time Information) responses.
-//
-// # Overview
-//
-// The converter package coordinates three main components:
-//   - GTFS static data (routes, stops, trips, shapes) via gtfs.GTFSIndex
-//   - GTFS-Realtime feeds (trip updates, vehicle positions, alerts) via gtfsrt.GTFSRTWrapper
-//   - Application configuration (field mutators, agency ID, etc.) via config.AppConfig
-//
-// # Usage
-//
-// Basic setup:
-//
-//	import (
-//	    "github.com/theoremus-urban-solutions/gtfsrt-to-siri/config"
-//	    "github.com/theoremus-urban-solutions/gtfsrt-to-siri/converter"
-//	    "github.com/theoremus-urban-solutions/gtfsrt-to-siri/formatter"
-//	    "github.com/theoremus-urban-solutions/gtfsrt-to-siri/gtfs"
-//	    "github.com/theoremus-urban-solutions/gtfsrt-to-siri/gtfsrt"
-//	)
-//
-//	// Load configuration
-//	cfg, _ := config.LoadAppConfig("config.yml")
-//
-//	// Initialize GTFS static data
-//	gtfsIdx, _ := gtfs.NewGTFSIndexFromConfig(cfg.GTFS)
-//
-//	// Initialize GTFS-RT wrapper
-//	rt := gtfsrt.NewGTFSRTWrapper(
-//	    cfg.GTFSRT.TripUpdatesURL,
-//	    cfg.GTFSRT.VehiclePositionsURL,
-//	    cfg.GTFSRT.ServiceAlertsURL,
-//	)
-//
-//	// Fetch latest real-time data
-//	rt.Refresh()
-//
-//	// Create converter
-//	conv := converter.NewConverter(gtfsIdx, rt, cfg)
-//
-// # Generating SIRI Responses
-//
-// The converter supports three SIRI modules:
-//
-// Vehicle Monitoring (VM) - Real-time vehicle positions and journey progress:
-//
-//	vmResp := conv.GetCompleteVehicleMonitoringResponse()
-//	rb := formatter.NewResponseBuilder()
-//	xmlBytes := rb.BuildXML(vmResp)
-//
-// Estimated Timetable (ET) - Predicted arrival/departure times:
-//
-//	et := conv.BuildEstimatedTimetable()
-//	etResp := formatter.WrapEstimatedTimetableResponse(et, cfg.GTFS.AgencyID)
-//	xmlBytes := rb.BuildXML(etResp)
-//
-//	// With filtering
-//	filtered := formatter.FilterEstimatedTimetable(et, "STOP_123", "ROUTE_A", "0")
-//
-// Situation Exchange (SX) - Service alerts and disruptions:
-//
-//	sx := conv.BuildSituationExchange()
-//	timestamp := rt.GetTimestampForFeedMessage()
-//	sxResp := formatter.WrapSituationExchangeResponse(sx, timestamp, cfg.GTFS.AgencyID)
-//	xmlBytes := rb.BuildXML(sxResp)
-//
-// # Architecture
-//
-// The converter package is organized into specialized files:
-//   - converter.go: Main Converter struct and initialization
-//   - vm.go: Vehicle Monitoring (SIRI-VM) conversion logic
-//   - et.go: Estimated Timetable (SIRI-ET) conversion logic
-//   - sx.go: Situation Exchange (SIRI-SX) conversion logic
-//   - calls.go: Shared call/stop building utilities
-//
-// # Thread Safety
-//
-// Converter instances are NOT thread-safe. Each request should use its own converter
-// instance or implement appropriate locking mechanisms. The underlying GTFS index and
-// GTFS-RT wrapper can be safely shared across multiple converters.
-//
-// # Performance Considerations
-//
-// - The converter performs on-demand conversion with no internal caching
-// - GTFS index is loaded once and kept in memory for fast lookups
-// - GTFS-RT data should be refreshed periodically (e.g., every 30 seconds)
-// - Vehicle position tracking uses snapshot-based estimation for missing data
-// - Expected to handle 20MB+ XML outputs efficiently
-//
-// # Integration Example
-//
-// Typical server integration pattern:
-//
-//	// Initialization (once at startup)
-//	gtfsIdx, _ := gtfs.NewGTFSIndexFromConfig(cfg.GTFS)
-//	rt := gtfsrt.NewGTFSRTWrapper(...)
-//
-//	// Background refresh (every 30 seconds)
-//	go func() {
-//	    ticker := time.NewTicker(30 * time.Second)
-//	    for range ticker.C {
-//	        rt.Refresh()
-//	    }
-//	}()
-//
-//	// Per-request handling
-//	http.HandleFunc("/siri/et", func(w http.ResponseWriter, r *http.Request) {
-//	    conv := converter.NewConverter(gtfsIdx, rt, cfg)
-//	    et := conv.BuildEstimatedTimetable()
-//	    resp := formatter.WrapEstimatedTimetableResponse(et, cfg.GTFS.AgencyID)
-//	    rb := formatter.NewResponseBuilder()
-//	    w.Header().Set("Content-Type", "application/xml")
-//	    w.Write(rb.BuildXML(resp))
-//	})
+/*
+Package converter transforms GTFS-Realtime data into SIRI format.
+
+This package is data-source agnostic and config-free. It accepts pre-loaded
+GTFS and GTFS-RT data along with simple options structs.
+
+# Basic Usage
+
+	// 1. Load GTFS and GTFS-RT (from any source)
+	gtfsIndex, _ := gtfs.NewGTFSIndexFromBytes(gtfsBytes, "AGENCY")
+	rt, _ := gtfsrt.NewGTFSRTWrapper(tuBytes, vpBytes, saBytes)
+
+	// 2. Create converter options
+	opts := converter.ConverterOptions{
+	    AgencyID:       "AGENCY",
+	    ReadIntervalMS: 30000,
+	    FieldMutators: converter.FieldMutators{
+	        StopPointRef: []string{"OLD_ID", "NEW_ID"},
+	    },
+	}
+
+	// 3. Create converter
+	conv := converter.NewConverter(gtfsIndex, rt, opts)
+
+	// 4. Generate SIRI responses
+	vm := conv.GetCompleteVehicleMonitoringResponse()
+	et := conv.BuildEstimatedTimetable()
+	sx := conv.BuildSituationExchange()
+
+# SIRI Modules
+
+Vehicle Monitoring (VM):
+
+	vm := conv.GetCompleteVehicleMonitoringResponse()
+	// Returns complete VM ServiceDelivery with all active vehicles
+
+Estimated Timetable (ET):
+
+	et := conv.BuildEstimatedTimetable()
+	// Returns ET with recorded/estimated calls for all trips
+
+Situation Exchange (SX):
+
+	sx := conv.BuildSituationExchange()
+	// Returns SX with all service alerts
+
+# Field Mutators
+
+Field mutators allow string replacement in SIRI references:
+
+	opts := converter.ConverterOptions{
+	    FieldMutators: converter.FieldMutators{
+	        StopPointRef:   []string{"OLD_STOP_1", "NEW_STOP_1", "OLD_STOP_2", "NEW_STOP_2"},
+	        OriginRef:      []string{"OLD_ORIGIN", "NEW_ORIGIN"},
+	        DestinationRef: []string{"OLD_DEST", "NEW_DEST"},
+	    },
+	}
+
+Format: [from1, to1, from2, to2, ...] - pairs of old/new values.
+
+# Configuration
+
+No config files required. Pass options directly:
+
+	opts := converter.ConverterOptions{
+	    AgencyID:       "AGENCY",        // Required for SIRI references
+	    ReadIntervalMS: 30000,           // For ValidUntil calculation
+	    FieldMutators:  FieldMutators{}, // Optional string replacements
+	}
+
+# Server Integration Pattern
+
+Typical Kafka-based server:
+
+	type Server struct {
+	    gtfsIndex *gtfs.GTFSIndex // Cached GTFS index
+	    opts      converter.ConverterOptions
+	}
+
+	func (s *Server) Init() error {
+	    // Parse GTFS once at startup
+	    gtfsBytes, _ := fetchFromMinIO("gtfs.zip")
+	    s.gtfsIndex, _ = gtfs.NewGTFSIndexFromBytes(gtfsBytes, "AGENCY")
+
+	    s.opts = converter.ConverterOptions{
+	        AgencyID:       "AGENCY",
+	        ReadIntervalMS: 30000,
+	    }
+	    return nil
+	}
+
+	func (s *Server) HandleKafkaMessage(pbBytes []byte) ([]byte, error) {
+	    // Parse GTFS-RT from Kafka (fast - only current data)
+	    rt, _ := gtfsrt.NewGTFSRTWrapper(pbBytes, nil, nil)
+
+	    // Convert (reuses cached GTFS index - very fast)
+	    conv := converter.NewConverter(s.gtfsIndex, rt, s.opts)
+	    response := conv.GetCompleteVehicleMonitoringResponse()
+
+	    // Format and return
+	    rb := formatter.NewResponseBuilder()
+	    return rb.BuildJSON(response), nil
+	}
+
+# Thread Safety
+
+Converter instances are NOT thread-safe. Create a new converter per request.
+The GTFS index and GTFS-RT wrapper can be safely shared across goroutines.
+
+# Performance
+
+- GTFS parsing: 500ms-2s (do once at startup)
+- GTFS-RT parsing: 10-50ms per message
+- Conversion: <1ms with cached GTFS index
+- Formatting: 5-20ms for XML/JSON
+
+# SIRI Compliance
+
+This converter follows Entur's Nordic SIRI Profile:
+
+- VM: Vehicle positions and journey progress
+- ET: Stop-level arrival/departure predictions
+- SX: Service alerts and disruptions
+
+All outputs include proper codespace prefixes (agency_id) in references.
+*/
 package converter

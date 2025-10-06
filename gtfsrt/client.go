@@ -1,70 +1,61 @@
 package gtfsrt
 
 import (
-	"context"
-	"errors"
+	"fmt"
 	"io"
 	"net/http"
-	"time"
-
-	gtfsrtpb "github.com/MobilityData/gtfs-realtime-bindings/golang/gtfs"
-	"google.golang.org/protobuf/proto"
 )
 
-func fetchFeed(url string) (*gtfsrtpb.FeedMessage, error) {
-	// basic retry with backoff and context timeout
-	var lastErr error
-	timeout := 10 * time.Second
-	attempts := 3
-	for i := 0; i < attempts; i++ {
-		ctx, cancel := context.WithTimeout(context.Background(), timeout)
-		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-		// optional headers could be injected here (API keys, etc.)
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			lastErr = err
-			cancel()
-			time.Sleep(time.Duration(i+1) * 250 * time.Millisecond)
-			continue
-		}
-		b, err := io.ReadAll(resp.Body)
-		_ = resp.Body.Close()
-		cancel()
-		if err != nil {
-			lastErr = err
-			time.Sleep(time.Duration(i+1) * 250 * time.Millisecond)
-			continue
-		}
-		var fm gtfsrtpb.FeedMessage
-		if err := proto.Unmarshal(b, &fm); err != nil {
-			lastErr = err
-			time.Sleep(time.Duration(i+1) * 250 * time.Millisecond)
-			continue
-		}
-		return &fm, nil
-	}
-	if lastErr == nil {
-		lastErr = errors.New("failed to fetch feed")
-	}
-	return nil, lastErr
+// Client is a simple HTTP client for fetching GTFS-RT protobuf data.
+// This is a CLI helper - library users should fetch data themselves.
+type Client struct {
+	httpClient *http.Client
 }
 
-// translatedStringToText returns the best-effort text from a TranslatedString
-func translatedStringToText(ts *gtfsrtpb.TranslatedString) string {
-	if ts == nil || len(ts.Translation) == 0 {
-		return ""
+// NewClient creates a new GTFS-RT HTTP client
+func NewClient() *Client {
+	return &Client{
+		httpClient: &http.Client{},
 	}
-	// Prefer entries with no language tag or first entry
-	var first string
-	for _, tr := range ts.Translation {
-		if tr.Text != nil {
-			if tr.Language == nil || *tr.Language == "" {
-				return *tr.Text
-			}
-			if first == "" {
-				first = *tr.Text
-			}
-		}
+}
+
+// Fetch fetches a single GTFS-RT feed from a URL and returns raw protobuf bytes.
+// Returns nil if url is empty (allows optional feeds).
+func (c *Client) Fetch(url string) ([]byte, error) {
+	if url == "" {
+		return nil, nil
 	}
-	return first
+
+	resp, err := c.httpClient.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch %s: %w", url, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("HTTP %d from %s", resp.StatusCode, url)
+	}
+
+	return io.ReadAll(resp.Body)
+}
+
+// FetchAll fetches all three GTFS-RT feeds (trip updates, vehicle positions, service alerts).
+// Empty URLs are skipped and return nil for that feed (allows optional feeds).
+func (c *Client) FetchAll(tripUpdatesURL, vehiclePositionsURL, serviceAlertsURL string) ([]byte, []byte, []byte, error) {
+	tu, err := c.Fetch(tripUpdatesURL)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("trip updates: %w", err)
+	}
+
+	vp, err := c.Fetch(vehiclePositionsURL)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("vehicle positions: %w", err)
+	}
+
+	sa, err := c.Fetch(serviceAlertsURL)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("service alerts: %w", err)
+	}
+
+	return tu, vp, sa, nil
 }

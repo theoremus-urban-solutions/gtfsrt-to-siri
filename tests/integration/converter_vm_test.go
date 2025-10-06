@@ -11,11 +11,11 @@ import (
 // Test VehicleMonitoring conversion with Sofia data
 func TestConverter_VehicleMonitoring_RealData(t *testing.T) {
 	// Load Sofia fixtures
-	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip")
+	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip", "SOFIA")
 	gtfsrtData := helpers.LoadGTFSRTFromLocal(t)
 
-	cfg := helpers.LoadTestConfig(t)
-	c := converter.NewConverter(gtfsIndex, gtfsrtData, *cfg)
+	opts := helpers.DefaultConverterOptions("SOFIA")
+	c := converter.NewConverter(gtfsIndex, gtfsrtData, opts)
 
 	result := c.GetCompleteVehicleMonitoringResponse()
 
@@ -36,11 +36,11 @@ func TestConverter_VehicleMonitoring_RealData(t *testing.T) {
 // Root Cause: Condition was `routeType > 0`, excluding route_type 0 (trams)
 // Fix: Changed to `routeType >= 0`
 func TestConverter_VehicleMode_TramRouteTypeZero(t *testing.T) {
-	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip")
+	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip", "SOFIA")
 	gtfsrtData := helpers.LoadGTFSRTFromLocal(t)
 
-	cfg := helpers.LoadTestConfig(t)
-	c := converter.NewConverter(gtfsIndex, gtfsrtData, *cfg)
+	opts := helpers.DefaultConverterOptions("SOFIA")
+	c := converter.NewConverter(gtfsIndex, gtfsrtData, opts)
 
 	result := c.GetCompleteVehicleMonitoringResponse()
 	vm := result.Siri.ServiceDelivery.VehicleMonitoringDelivery[0]
@@ -77,11 +77,11 @@ func TestConverter_VehicleMode_TramRouteTypeZero(t *testing.T) {
 // Root Cause: Used computed tripKey instead of raw tripID for GTFS lookups
 // Fix: Changed to use tripID directly for GetDepartureTime/GetArrivalTime
 func TestConverter_Delay_UsesTripID(t *testing.T) {
-	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip")
+	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip", "SOFIA")
 	gtfsrtData := helpers.LoadGTFSRTFromLocal(t)
 
-	cfg := helpers.LoadTestConfig(t)
-	c := converter.NewConverter(gtfsIndex, gtfsrtData, *cfg)
+	opts := helpers.DefaultConverterOptions("SOFIA")
+	c := converter.NewConverter(gtfsIndex, gtfsrtData, opts)
 
 	result := c.GetCompleteVehicleMonitoringResponse()
 	vm := result.Siri.ServiceDelivery.VehicleMonitoringDelivery[0]
@@ -122,11 +122,11 @@ func TestConverter_Delay_MissingStartDateFallback(t *testing.T) {
 	// This test verifies that the converter handles missing start_date
 	// by using the feed timestamp date as fallback
 
-	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip")
+	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip", "SOFIA")
 	gtfsrtData := helpers.LoadGTFSRTFromLocal(t)
 
-	cfg := helpers.LoadTestConfig(t)
-	c := converter.NewConverter(gtfsIndex, gtfsrtData, *cfg)
+	opts := helpers.DefaultConverterOptions("SOFIA")
+	c := converter.NewConverter(gtfsIndex, gtfsrtData, opts)
 
 	result := c.GetCompleteVehicleMonitoringResponse()
 	vm := result.Siri.ServiceDelivery.VehicleMonitoringDelivery[0]
@@ -152,11 +152,12 @@ func TestConverter_Delay_MissingStartDateFallback(t *testing.T) {
 
 // Test that OriginRef and DestinationRef are populated
 func TestConverter_VM_OriginDestination(t *testing.T) {
-	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip")
+
+	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip", "SOFIA")
 	gtfsrtData := helpers.LoadGTFSRTFromLocal(t)
 
-	cfg := helpers.LoadTestConfig(t)
-	c := converter.NewConverter(gtfsIndex, gtfsrtData, *cfg)
+	opts := helpers.DefaultConverterOptions("SOFIA")
+	c := converter.NewConverter(gtfsIndex, gtfsrtData, opts)
 
 	result := c.GetCompleteVehicleMonitoringResponse()
 	vm := result.Siri.ServiceDelivery.VehicleMonitoringDelivery[0]
@@ -179,11 +180,11 @@ func TestConverter_VM_OriginDestination(t *testing.T) {
 
 // Test that MonitoredCall is populated
 func TestConverter_VM_MonitoredCall(t *testing.T) {
-	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip")
+	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip", "SOFIA")
 	gtfsrtData := helpers.LoadGTFSRTFromLocal(t)
 
-	cfg := helpers.LoadTestConfig(t)
-	c := converter.NewConverter(gtfsIndex, gtfsrtData, *cfg)
+	opts := helpers.DefaultConverterOptions("SOFIA")
+	c := converter.NewConverter(gtfsIndex, gtfsrtData, opts)
 
 	result := c.GetCompleteVehicleMonitoringResponse()
 	vm := result.Siri.ServiceDelivery.VehicleMonitoringDelivery[0]

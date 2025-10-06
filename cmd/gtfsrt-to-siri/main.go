@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"strings"
 
-	"mta/gtfsrt-to-siri/config"
-	"mta/gtfsrt-to-siri/converter"
-	"mta/gtfsrt-to-siri/formatter"
-	"mta/gtfsrt-to-siri/gtfs"
-	"mta/gtfsrt-to-siri/gtfsrt"
-	"mta/gtfsrt-to-siri/utils"
+	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/config"
+	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/converter"
+	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/formatter"
+	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/gtfs"
+	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/gtfsrt"
+	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/utils"
 )
 
 func main() {
@@ -36,7 +36,17 @@ func main() {
 
 	switch *mode {
 	case "oneshot":
-		gtfs, _ := gtfs.NewGTFSIndexFromConfig(gtfsCfg)
+		// Fetch GTFS static data
+		gtfsBytes, err := gtfs.FetchGTFSData(gtfsCfg.StaticURL)
+		if err != nil {
+			panic(fmt.Sprintf("Failed to fetch GTFS: %v", err))
+		}
+		gtfsIndex, err := gtfs.NewGTFSIndexFromBytes(gtfsBytes, gtfsCfg.AgencyID)
+		if err != nil {
+			panic(fmt.Sprintf("Failed to parse GTFS: %v", err))
+		}
+
+		// Determine which modules to fetch
 		tu := rtCfg.TripUpdatesURL
 		vp := rtCfg.VehiclePositionsURL
 		if *tripUpdates != "" {
@@ -45,7 +55,7 @@ func main() {
 		if *vehiclePositions != "" {
 			vp = *vehiclePositions
 		}
-		// Apply modules selection: disable URLs for modules not requested
+
 		includeTU, includeVP, includeAlerts := false, false, false
 		{
 			mset := map[string]bool{}
@@ -65,6 +75,7 @@ func main() {
 		if !includeVP {
 			vp = ""
 		}
+
 		alerts := rtCfg.ServiceAlertsURL
 		if *serviceAlerts != "" {
 			alerts = *serviceAlerts
@@ -76,9 +87,30 @@ func main() {
 			panic("alerts module required for sx call; include via -modules=alerts")
 		}
 
-		rt := gtfsrt.NewGTFSRTWrapper(tu, vp, alerts)
-		_ = rt.Refresh()
-		conv := converter.NewConverter(gtfs, rt, config.Config)
+		// Fetch GTFS-RT data as raw bytes
+		client := gtfsrt.NewClient()
+		tuBytes, vpBytes, alertBytes, err := client.FetchAll(tu, vp, alerts)
+		if err != nil {
+			panic(fmt.Sprintf("Failed to fetch GTFS-RT: %v", err))
+		}
+
+		// Create GTFS-RT wrapper from raw bytes
+		rt, err := gtfsrt.NewGTFSRTWrapper(tuBytes, vpBytes, alertBytes)
+		if err != nil {
+			panic(fmt.Sprintf("Failed to parse GTFS-RT: %v", err))
+		}
+
+		// Create converter with options from config
+		opts := converter.ConverterOptions{
+			AgencyID:       gtfsCfg.AgencyID,
+			ReadIntervalMS: int64(rtCfg.ReadIntervalMS),
+			FieldMutators: converter.FieldMutators{
+				StopPointRef:   config.Config.Converter.FieldMutators.StopPointRef,
+				OriginRef:      config.Config.Converter.FieldMutators.OriginRef,
+				DestinationRef: config.Config.Converter.FieldMutators.DestinationRef,
+			},
+		}
+		conv := converter.NewConverter(gtfsIndex, rt, opts)
 		rb := formatter.NewResponseBuilder()
 
 		var buf []byte

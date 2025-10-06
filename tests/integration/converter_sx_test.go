@@ -10,11 +10,11 @@ import (
 
 // Test SituationExchange conversion
 func TestConverter_SituationExchange_Basic(t *testing.T) {
-	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip")
+	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip", "SOFIA")
 	gtfsrtData := helpers.LoadGTFSRTFromLocal(t)
 
-	cfg := helpers.LoadTestConfig(t)
-	c := converter.NewConverter(gtfsIndex, gtfsrtData, *cfg)
+	opts := helpers.DefaultConverterOptions("SOFIA")
+	c := converter.NewConverter(gtfsIndex, gtfsrtData, opts)
 
 	result := c.BuildSituationExchange()
 
@@ -36,11 +36,11 @@ func TestConverter_SituationExchange_Basic(t *testing.T) {
 
 // Test SX alert structure if alerts exist
 func TestConverter_SX_AlertStructure(t *testing.T) {
-	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip")
+	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip", "SOFIA")
 	gtfsrtData := helpers.LoadGTFSRTFromLocal(t)
 
-	cfg := helpers.LoadTestConfig(t)
-	c := converter.NewConverter(gtfsIndex, gtfsrtData, *cfg)
+	opts := helpers.DefaultConverterOptions("SOFIA")
+	c := converter.NewConverter(gtfsIndex, gtfsrtData, opts)
 
 	result := c.BuildSituationExchange()
 
@@ -68,11 +68,11 @@ func TestConverter_SX_AlertStructure(t *testing.T) {
 
 // Test SX affected entities (routes, stops, trips)
 func TestConverter_SX_AffectedEntities(t *testing.T) {
-	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip")
+	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip", "SOFIA")
 	gtfsrtData := helpers.LoadGTFSRTFromLocal(t)
 
-	cfg := helpers.LoadTestConfig(t)
-	c := converter.NewConverter(gtfsIndex, gtfsrtData, *cfg)
+	opts := helpers.DefaultConverterOptions("SOFIA")
+	c := converter.NewConverter(gtfsIndex, gtfsrtData, opts)
 
 	result := c.BuildSituationExchange()
 
@@ -96,11 +96,11 @@ func TestConverter_SX_AffectedEntities(t *testing.T) {
 
 // Test SX severity and validity period
 func TestConverter_SX_MetadataFields(t *testing.T) {
-	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip")
+	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip", "SOFIA")
 	gtfsrtData := helpers.LoadGTFSRTFromLocal(t)
 
-	cfg := helpers.LoadTestConfig(t)
-	c := converter.NewConverter(gtfsIndex, gtfsrtData, *cfg)
+	opts := helpers.DefaultConverterOptions("SOFIA")
+	c := converter.NewConverter(gtfsIndex, gtfsrtData, opts)
 
 	result := c.BuildSituationExchange()
 

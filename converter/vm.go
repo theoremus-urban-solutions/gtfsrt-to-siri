@@ -9,70 +9,70 @@ import (
 )
 
 func (c *Converter) buildMVJ(tripID string) siri.MonitoredVehicleJourney {
-	agency := c.Cfg.GTFS.AgencyID
-	startDate := c.GTFSRT.GetStartDateForTrip(tripID)
+	agency := c.opts.AgencyID
+	startDate := c.gtfsrt.GetStartDateForTrip(tripID)
 	tripKey := gtfsrt.TripKeyForConverter(tripID, agency, startDate)
 
-	// Prefer RT route_id; fallback to static lookup by tripKey
-	routeID := c.GTFSRT.GetRouteIDForTrip(tripID)
+	// Prefer RT route_id; fallback to static lookup by tripID
+	routeID := c.gtfsrt.GetRouteIDForTrip(tripID)
 	if routeID == "" {
-		routeID = c.GTFS.GetRouteIDForTrip(tripKey)
+		routeID = c.gtfs.GetRouteIDForTrip(tripID)
 	}
 	// LineRef format: {codespace}:Line:{lineid}
 	lineRef := routeID
 	if agency != "" && routeID != "" {
 		lineRef = agency + ":Line:" + routeID
 	}
-	direction := c.GTFSRT.GetRouteDirectionForTrip(tripID)
+	direction := c.gtfsrt.GetRouteDirectionForTrip(tripID)
 	if direction == "" {
-		direction = c.GTFS.GetDirectionIDForTrip(tripKey)
+		direction = c.gtfs.GetDirectionIDForTrip(tripID)
 	}
 	// Get origin and destination stops (format: {codespace}:Quay:{stopid})
-	originStopID := c.GTFS.GetOriginStopIDForTrip(tripKey)
-	originStopID = applyFieldMutators(originStopID, c.Cfg.Converter.FieldMutators.OriginRef)
+	originStopID := c.gtfs.GetOriginStopIDForTrip(tripID)
+	originStopID = applyFieldMutators(originStopID, c.opts.FieldMutators.OriginRef)
 	origin := ""
 	if originStopID != "" && agency != "" {
 		origin = agency + ":Quay:" + originStopID
 	}
-	originName := c.GTFS.GetStopName(originStopID)
+	originName := c.gtfs.GetStopName(originStopID)
 
-	destStopID := c.GTFS.GetDestinationStopIDForTrip(tripKey)
-	destStopID = applyFieldMutators(destStopID, c.Cfg.Converter.FieldMutators.DestinationRef)
+	destStopID := c.gtfs.GetDestinationStopIDForTrip(tripID)
+	destStopID = applyFieldMutators(destStopID, c.opts.FieldMutators.DestinationRef)
 	dest := ""
 	if destStopID != "" && agency != "" {
 		dest = agency + ":Quay:" + destStopID
 	}
-	head := c.GTFS.GetTripHeadsign(tripKey)
-	pub := c.GTFS.GetRouteShortName(routeID)
+	head := c.gtfs.GetTripHeadsign(tripID)
+	pub := c.gtfs.GetRouteShortName(routeID)
 
 	// VehicleRef format: {codespace}:VehicleRef:{vehicle_id}
 	vehRef := ""
-	if rawVehicleID := c.GTFSRT.GetVehicleRefForTrip(tripID); rawVehicleID != "" {
+	if rawVehicleID := c.gtfsrt.GetVehicleRefForTrip(tripID); rawVehicleID != "" {
 		vehRef = agency + ":VehicleRef:" + rawVehicleID
 	}
 	var bearing *float64
-	if b, ok := c.GTFSRT.GetVehicleBearingForTrip(tripID); ok {
+	if b, ok := c.gtfsrt.GetVehicleBearingForTrip(tripID); ok {
 		bearing = &b
 	}
 	var latPtr *float64
 	var lonPtr *float64
-	if lat, ok := c.GTFSRT.GetVehicleLatForTrip(tripID); ok {
+	if lat, ok := c.gtfsrt.GetVehicleLatForTrip(tripID); ok {
 		latPtr = &lat
 	}
-	if lon, ok := c.GTFSRT.GetVehicleLonForTrip(tripID); ok {
+	if lon, ok := c.gtfsrt.GetVehicleLonForTrip(tripID); ok {
 		lonPtr = &lon
 	}
 	// Snapshot fallbacks when RT missing
 	if latPtr == nil || lonPtr == nil {
-		if sLat := c.Snap.GetLatitude(tripKey); sLat != nil && latPtr == nil {
+		if sLat := c.snap.GetLatitude(tripKey); sLat != nil && latPtr == nil {
 			latPtr = sLat
 		}
-		if sLon := c.Snap.GetLongitude(tripKey); sLon != nil && lonPtr == nil {
+		if sLon := c.snap.GetLongitude(tripKey); sLon != nil && lonPtr == nil {
 			lonPtr = sLon
 		}
 	}
 	if bearing == nil {
-		if sB := c.Snap.GetBearing(tripKey); sB != nil {
+		if sB := c.snap.GetBearing(tripKey); sB != nil {
 			bearing = sB
 		}
 	}
@@ -87,13 +87,13 @@ func (c *Converter) buildMVJ(tripID string) siri.MonitoredVehicleJourney {
 	// OriginAimedDepartureTime fallback order: RT dep at origin, else RT arr at origin, else GTFS static departure time
 	originAimed := ""
 	if originStopID != "" {
-		if dep := c.GTFSRT.GetExpectedDepartureTimeAtStopForTrip(tripID, originStopID); dep > 0 {
+		if dep := c.gtfsrt.GetExpectedDepartureTimeAtStopForTrip(tripID, originStopID); dep > 0 {
 			originAimed = utils.Iso8601FromUnixSeconds(dep)
-		} else if arr := c.GTFSRT.GetExpectedArrivalTimeAtStopForTrip(tripID, originStopID); arr > 0 {
+		} else if arr := c.gtfsrt.GetExpectedArrivalTimeAtStopForTrip(tripID, originStopID); arr > 0 {
 			originAimed = utils.Iso8601FromUnixSeconds(arr)
 		} else {
 			// Fall back to GTFS static departure time
-			if staticDepTime := c.GTFS.GetDepartureTime(tripID, originStopID); staticDepTime != "" {
+			if staticDepTime := c.gtfs.GetDepartureTime(tripID, originStopID); staticDepTime != "" {
 				// Convert HH:MM:SS to ISO8601 timestamp using the start date
 				originAimed = utils.Iso8601FromGTFSTimeAndDate(staticDepTime, startDate)
 			}
@@ -114,13 +114,13 @@ func (c *Converter) buildMVJ(tripID string) siri.MonitoredVehicleJourney {
 
 	// Get VehicleMode from route_type (same as ET)
 	vehicleMode := ""
-	if routeType := c.GTFS.GetRouteType(routeID); routeType >= 0 {
+	if routeType := c.gtfs.GetRouteType(routeID); routeType >= 0 {
 		vehicleMode = mapGTFSRouteTypeToSIRIVehicleMode(routeType)
 	}
 
 	// OperatorRef format: {codespace}:Operator:{operator_name}
 	operatorRef := agency
-	if agencyName := c.GTFS.GetAgencyName(); agencyName != "" {
+	if agencyName := c.gtfs.GetAgencyName(); agencyName != "" {
 		operatorRef = agency + ":Operator:" + agencyName
 	}
 
@@ -156,9 +156,9 @@ func (c *Converter) buildMVJ(tripID string) siri.MonitoredVehicleJourney {
 // CfGDatedVehicleJourneyRef returns a DatedVehicleJourneyRef; concat agency + full trip id based on strategy
 func (c *Converter) CfGDatedVehicleJourneyRef(tripKey, agency string) string {
 	if agency != "" {
-		return agency + "_" + c.GTFS.GetFullTripIDForTrip(tripKey)
+		return agency + "_" + c.gtfs.GetFullTripIDForTrip(tripKey)
 	}
-	return c.GTFS.GetFullTripIDForTrip(tripKey)
+	return c.gtfs.GetFullTripIDForTrip(tripKey)
 }
 
 // applyFieldMutators applies [from,to] pairs to a reference value
@@ -180,7 +180,7 @@ func applyFieldMutators(value string, mapping []string) string {
 // Compares GTFS-RT expected time with GTFS static scheduled time for the next/current stop
 func (c *Converter) calculateDelay(tripID string) string {
 	// Get the next/current stop from GTFS-RT
-	stops := c.GTFSRT.GetOnwardStopIDsForTrip(tripID)
+	stops := c.gtfsrt.GetOnwardStopIDsForTrip(tripID)
 	if len(stops) == 0 {
 		return "PT0S" // No stops, no delay
 	}
@@ -188,28 +188,28 @@ func (c *Converter) calculateDelay(tripID string) string {
 	currentStopID := stops[0] // First onward stop is current/next
 
 	// Get start date for time conversion
-	startDate := c.GTFSRT.GetStartDateForTrip(tripID)
+	startDate := c.gtfsrt.GetStartDateForTrip(tripID)
 	// If no start_date from GTFS-RT, use today's date
 	if startDate == "" {
-		startDate = utils.Iso8601DateFromUnixSeconds(c.GTFSRT.GetTimestampForFeedMessage())
+		startDate = utils.Iso8601DateFromUnixSeconds(c.gtfsrt.GetTimestampForFeedMessage())
 		startDate = startDate[0:4] + startDate[5:7] + startDate[8:10] // Convert YYYY-MM-DD to YYYYMMDD
 	}
 
 	// Get expected time from GTFS-RT (prefer departure, fallback to arrival)
 	var expectedTime int64
-	if dep := c.GTFSRT.GetExpectedDepartureTimeAtStopForTrip(tripID, currentStopID); dep > 0 {
+	if dep := c.gtfsrt.GetExpectedDepartureTimeAtStopForTrip(tripID, currentStopID); dep > 0 {
 		expectedTime = dep
-	} else if arr := c.GTFSRT.GetExpectedArrivalTimeAtStopForTrip(tripID, currentStopID); arr > 0 {
+	} else if arr := c.gtfsrt.GetExpectedArrivalTimeAtStopForTrip(tripID, currentStopID); arr > 0 {
 		expectedTime = arr
 	} else {
 		return "PT0S" // No RT data
 	}
 
 	// Get scheduled time from GTFS static
-	gtfsTime := c.GTFS.GetDepartureTime(tripID, currentStopID)
+	gtfsTime := c.gtfs.GetDepartureTime(tripID, currentStopID)
 	if gtfsTime == "" {
 		// Try arrival time if departure not available
-		gtfsTime = c.GTFS.GetArrivalTime(tripID, currentStopID)
+		gtfsTime = c.gtfs.GetArrivalTime(tripID, currentStopID)
 	}
 	if gtfsTime == "" || startDate == "" {
 		return "PT0S" // No static data
@@ -229,7 +229,7 @@ func (c *Converter) calculateDelay(tripID string) string {
 
 // mapOccupancyStatus maps GTFS-RT TripUpdate occupancy_status to SIRI Occupancy values
 func (c *Converter) mapOccupancyStatus(tripID string) string {
-	occupancyStatus := c.GTFSRT.GetOccupancyStatusForTrip(tripID)
+	occupancyStatus := c.gtfsrt.GetOccupancyStatusForTrip(tripID)
 
 	switch occupancyStatus {
 	case 0, 1: // EMPTY, MANY_SEATS_AVAILABLE
@@ -253,7 +253,7 @@ func (c *Converter) mapOccupancyStatus(tripID string) string {
 
 // mapCongestionLevel maps GTFS-RT VehiclePosition congestion_level to SIRI InCongestion boolean
 func (c *Converter) mapCongestionLevel(tripID string) *bool {
-	congestionLevel := c.GTFSRT.GetCongestionLevelForTrip(tripID)
+	congestionLevel := c.gtfsrt.GetCongestionLevelForTrip(tripID)
 
 	// If no congestion data available, return nil (omit field)
 	if congestionLevel < 0 {
@@ -268,7 +268,7 @@ func (c *Converter) mapCongestionLevel(tripID string) *bool {
 
 // buildMonitoredCall builds MonitoredCall for current/next stop (SIRI-VM spec)
 func (c *Converter) buildMonitoredCall(tripID string) *siri.MonitoredCall {
-	stops := c.GTFSRT.GetOnwardStopIDsForTrip(tripID)
+	stops := c.gtfsrt.GetOnwardStopIDsForTrip(tripID)
 	if len(stops) == 0 {
 		return nil
 	}
@@ -277,21 +277,21 @@ func (c *Converter) buildMonitoredCall(tripID string) *siri.MonitoredCall {
 	currentStopID := stops[0]
 
 	// Check if vehicle is at stop (distance < 50m)
-	agency := c.Cfg.GTFS.AgencyID
-	startDate := c.GTFSRT.GetStartDateForTrip(tripID)
+	agency := c.opts.AgencyID
+	startDate := c.gtfsrt.GetStartDateForTrip(tripID)
 	tripKey := gtfsrt.TripKeyForConverter(tripID, agency, startDate)
 
-	vehKM := c.Snap.GetVehicleDistanceAlongRouteInKilometers(tripKey)
-	stopKM := c.GTFS.GetStopDistanceAlongRouteForTripInKilometers(tripKey, currentStopID)
+	vehKM := c.snap.GetVehicleDistanceAlongRouteInKilometers(tripKey)
+	stopKM := c.gtfs.GetStopDistanceAlongRouteForTripInKilometers(tripID, currentStopID)
 	distanceToStop := (stopKM - vehKM) * 1000 // meters
 
 	vehicleAtStop := !math.IsNaN(vehKM) && distanceToStop >= -50 && distanceToStop <= 50
 
-	stopName := c.GTFS.GetStopName(currentStopID)
+	stopName := c.gtfs.GetStopName(currentStopID)
 
 	// Get stop order/sequence from GTFS static
 	var order *int
-	if stopSeq := c.GTFS.TripStopSeq[tripKey]; len(stopSeq) > 0 {
+	if stopSeq := c.gtfs.TripStopSeq[tripID]; len(stopSeq) > 0 {
 		for i, stopID := range stopSeq {
 			if stopID == currentStopID {
 				orderVal := i + 1 // 1-based index
@@ -302,7 +302,7 @@ func (c *Converter) buildMonitoredCall(tripID string) *siri.MonitoredCall {
 	}
 
 	// Format StopPointRef as {codespace}:Quay:{stopid}
-	currentStopID = applyFieldMutators(currentStopID, c.Cfg.Converter.FieldMutators.StopPointRef)
+	currentStopID = applyFieldMutators(currentStopID, c.opts.FieldMutators.StopPointRef)
 	stopPointRef := ""
 	if currentStopID != "" && agency != "" {
 		stopPointRef = agency + ":Quay:" + currentStopID

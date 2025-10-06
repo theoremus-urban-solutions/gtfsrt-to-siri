@@ -7,9 +7,9 @@ import (
 )
 
 func (c *Converter) BuildSituationExchange() siri.SituationExchange {
-	alerts := c.GTFSRT.GetAlerts()
+	alerts := c.gtfsrt.GetAlerts()
 	elements := make([]siri.PtSituationElement, 0, len(alerts))
-	now := c.GTFSRT.GetTimestampForFeedMessage()
+	now := c.gtfsrt.GetTimestampForFeedMessage()
 	for _, a := range alerts {
 		severity, effectPrefix := mapGTFSRTEffectToSIRISeverity(a.Effect)
 		description := a.Description
@@ -17,7 +17,7 @@ func (c *Converter) BuildSituationExchange() siri.SituationExchange {
 			description = effectPrefix + ": " + a.Description
 		}
 		// Build situation number with codespace prefix
-		codespace := c.Cfg.GTFS.AgencyID
+		codespace := c.opts.AgencyID
 		if codespace == "" {
 			codespace = "UNKNOWN"
 		}
@@ -58,13 +58,13 @@ func (c *Converter) BuildSituationExchange() siri.SituationExchange {
 			}
 			seenTrips[tid] = true
 			vj := siri.AffectedVehicleJourney{
-				DatedVehicleJourneyRef: gtfsrt.TripKeyForConverter(tid, c.Cfg.GTFS.AgencyID, c.GTFSRT.GetStartDateForTrip(tid)),
+				DatedVehicleJourneyRef: gtfsrt.TripKeyForConverter(tid, c.opts.AgencyID, c.gtfsrt.GetStartDateForTrip(tid)),
 			}
 			// LineRef with codespace prefix
-			if rid := c.GTFSRT.GetRouteIDForTrip(tid); rid != "" {
+			if rid := c.gtfsrt.GetRouteIDForTrip(tid); rid != "" {
 				vj.LineRef = codespace + ":Line:" + rid
 			}
-			if dir := c.GTFSRT.GetRouteDirectionForTrip(tid); dir != "" {
+			if dir := c.gtfsrt.GetRouteDirectionForTrip(tid); dir != "" {
 				vj.DirectionRef = dir
 			}
 			el.Affects.VehicleJourneys = append(el.Affects.VehicleJourneys, vj)
@@ -87,7 +87,7 @@ func (c *Converter) BuildSituationExchange() siri.SituationExchange {
 		// Build StopPoints for stop-only alerts (at Affects level)
 		for _, sid := range a.StopIDs {
 			el.Affects.StopPoints = append(el.Affects.StopPoints, siri.AffectedStopPoint{
-				StopPointRef: applyFieldMutators(sid, c.Cfg.Converter.FieldMutators.StopPointRef),
+				StopPointRef: applyFieldMutators(sid, c.opts.FieldMutators.StopPointRef),
 			})
 		}
 		// Add siri.Consequences derived from GTFS-RT Effect

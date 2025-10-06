@@ -8,7 +8,7 @@ import (
 )
 
 func TestGTFSIndex_LoadsSofiaData(t *testing.T) {
-	gtfsIndex := helpers.LoadTestGTFS(t, "sofia-static.zip")
+	gtfsIndex := helpers.LoadTestGTFS(t, "sofia-static.zip", "SOFIA")
 
 	if gtfsIndex == nil {
 		t.Fatal("Failed to load Sofia GTFS data")
@@ -27,7 +27,7 @@ func TestGTFSIndex_LoadsSofiaData(t *testing.T) {
 }
 
 func TestGTFSIndex_GetStopName(t *testing.T) {
-	gtfsIndex := helpers.LoadTestGTFS(t, "sofia-static.zip")
+	gtfsIndex := helpers.LoadTestGTFS(t, "sofia-static.zip", "SOFIA")
 
 	// Find a real stop ID from a trip
 	var realStopID string
@@ -81,7 +81,7 @@ func TestGTFSIndex_GetStopName(t *testing.T) {
 func TestGTFSIndex_GetRouteType_Trams(t *testing.T) {
 	// CRITICAL REGRESSION TEST: Ensure trams (TM routes) have route_type 0
 	// and that we handle route_type >= 0 (not > 0)
-	gtfsIndex := helpers.LoadTestGTFS(t, "sofia-static.zip")
+	gtfsIndex := helpers.LoadTestGTFS(t, "sofia-static.zip", "SOFIA")
 
 	// Find a TM route (tram)
 	var tramRouteID string
@@ -107,7 +107,7 @@ func TestGTFSIndex_GetRouteType_Trams(t *testing.T) {
 }
 
 func TestGTFSIndex_GetRouteType_Various(t *testing.T) {
-	gtfsIndex := helpers.LoadTestGTFS(t, "sofia-static.zip")
+	gtfsIndex := helpers.LoadTestGTFS(t, "sofia-static.zip", "SOFIA")
 
 	// Test various route prefixes in Sofia
 	prefixTests := []struct {
@@ -144,7 +144,7 @@ func TestGTFSIndex_GetRouteType_Various(t *testing.T) {
 }
 
 func TestGTFSIndex_GetRouteShortName(t *testing.T) {
-	gtfsIndex := helpers.LoadTestGTFS(t, "sofia-static.zip")
+	gtfsIndex := helpers.LoadTestGTFS(t, "sofia-static.zip", "SOFIA")
 
 	// Find any trip and its route
 	var testRouteID string
@@ -166,7 +166,7 @@ func TestGTFSIndex_GetRouteShortName(t *testing.T) {
 }
 
 func TestGTFSIndex_GetDepartureTime(t *testing.T) {
-	gtfsIndex := helpers.LoadTestGTFS(t, "sofia-static.zip")
+	gtfsIndex := helpers.LoadTestGTFS(t, "sofia-static.zip", "SOFIA")
 
 	// Find a trip with stop times
 	var testTripID, testStopID string
@@ -201,7 +201,7 @@ func TestGTFSIndex_GetDepartureTime(t *testing.T) {
 }
 
 func TestGTFSIndex_GetArrivalTime(t *testing.T) {
-	gtfsIndex := helpers.LoadTestGTFS(t, "sofia-static.zip")
+	gtfsIndex := helpers.LoadTestGTFS(t, "sofia-static.zip", "SOFIA")
 
 	// Find a trip with stop times
 	var testTripID, testStopID string
@@ -224,7 +224,7 @@ func TestGTFSIndex_GetArrivalTime(t *testing.T) {
 }
 
 func TestGTFSIndex_GetPreviousStopIDOfStopForTrip(t *testing.T) {
-	gtfsIndex := helpers.LoadTestGTFS(t, "sofia-static.zip")
+	gtfsIndex := helpers.LoadTestGTFS(t, "sofia-static.zip", "SOFIA")
 
 	// Find a trip with multiple stops
 	var testTripID string
@@ -261,7 +261,7 @@ func TestGTFSIndex_GetPreviousStopIDOfStopForTrip(t *testing.T) {
 }
 
 func TestGTFSIndex_TripStopSequence(t *testing.T) {
-	gtfsIndex := helpers.LoadTestGTFS(t, "sofia-static.zip")
+	gtfsIndex := helpers.LoadTestGTFS(t, "sofia-static.zip", "SOFIA")
 
 	// Find a trip
 	var testTripID string
@@ -289,7 +289,7 @@ func TestGTFSIndex_TripStopSequence(t *testing.T) {
 }
 
 func TestGTFSIndex_GetAgencyName(t *testing.T) {
-	gtfsIndex := helpers.LoadTestGTFS(t, "sofia-static.zip")
+	gtfsIndex := helpers.LoadTestGTFS(t, "sofia-static.zip", "SOFIA")
 
 	result := gtfsIndex.GetAgencyName()
 	if result == "" {
@@ -300,7 +300,7 @@ func TestGTFSIndex_GetAgencyName(t *testing.T) {
 }
 
 func TestGTFSIndex_GetOriginAndDestination(t *testing.T) {
-	gtfsIndex := helpers.LoadTestGTFS(t, "sofia-static.zip")
+	gtfsIndex := helpers.LoadTestGTFS(t, "sofia-static.zip", "SOFIA")
 
 	// Find a trip with multiple stops
 	var testTripID string

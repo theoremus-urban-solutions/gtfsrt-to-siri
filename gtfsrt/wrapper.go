@@ -1,19 +1,17 @@
 package gtfsrt
 
 import (
+	"fmt"
 	"time"
 
-	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/config"
-
 	gtfsrtpb "github.com/MobilityData/gtfs-realtime-bindings/golang/gtfs"
+	"google.golang.org/protobuf/proto"
 )
 
-// GTFSRTWrapper stores GTFS-Realtime data in memory for fast lookups
+// GTFSRTWrapper stores GTFS-Realtime data in memory for fast lookups.
+// This wrapper is data-source agnostic - it accepts raw protobuf bytes
+// and does NOT handle HTTP fetching or file I/O.
 type GTFSRTWrapper struct {
-	tripUpdatesURL      string
-	vehiclePositionsURL string
-	serviceAlertsURL    string
-
 	trips           map[string]struct{}
 	vehicleTS       map[string]int64
 	headerTimestamp int64
@@ -42,114 +40,71 @@ type GTFSRTWrapper struct {
 	alertsByTrip  map[string][]int // trip_id -> indices
 }
 
-// NewGTFSRTWrapper creates a new wrapper for GTFS-RT feeds
-func NewGTFSRTWrapper(tripUpdatesURL, vehiclePositionsURL, serviceAlertsURL string) *GTFSRTWrapper {
-	return &GTFSRTWrapper{
-		tripUpdatesURL:      tripUpdatesURL,
-		vehiclePositionsURL: vehiclePositionsURL,
-		serviceAlertsURL:    serviceAlertsURL,
-		trips:               map[string]struct{}{},
-		vehicleTS:           map[string]int64{},
-		schedRelByStop:      map[string]map[string]int32{},
-		headerTimestamp:     time.Now().Unix(),
-		tripRoute:           map[string]string{},
-		tripDir:             map[string]string{},
-		tripDate:            map[string]string{},
-		onwardStops:         map[string][]string{},
-		etaByStop:           map[string]map[string]int64{},
-		etdByStop:           map[string]map[string]int64{},
-		tripVehicleRef:      map[string]string{},
-		tripLat:             map[string]float64{},
-		tripLon:             map[string]float64{},
-		tripBearing:         map[string]float64{},
-		tripOccupancy:       map[string]int32{},
-		tripCongestion:      map[string]int32{},
-		alerts:              []RTAlert{},
-		alertsByRoute:       map[string][]int{},
-		alertsByStop:        map[string][]int{},
-		alertsByTrip:        map[string][]int{},
+// NewGTFSRTWrapper creates a new wrapper from raw GTFS-RT protobuf bytes.
+// Pass nil or empty byte slices for feeds you don't have.
+//
+// Example:
+//
+//	tuBytes := fetchTripUpdates() // From HTTP, Kafka, files, etc.
+//	vpBytes := fetchVehiclePositions()
+//	saBytes := fetchServiceAlerts()
+//	wrapper, err := gtfsrt.NewGTFSRTWrapper(tuBytes, vpBytes, saBytes)
+func NewGTFSRTWrapper(tripUpdatesData, vehiclePositionsData, serviceAlertsData []byte) (*GTFSRTWrapper, error) {
+	wrapper := &GTFSRTWrapper{
+		trips:          map[string]struct{}{},
+		vehicleTS:      map[string]int64{},
+		schedRelByStop: map[string]map[string]int32{},
+		tripRoute:      map[string]string{},
+		tripDir:        map[string]string{},
+		tripDate:       map[string]string{},
+		onwardStops:    map[string][]string{},
+		etaByStop:      map[string]map[string]int64{},
+		etdByStop:      map[string]map[string]int64{},
+		tripVehicleRef: map[string]string{},
+		tripLat:        map[string]float64{},
+		tripLon:        map[string]float64{},
+		tripBearing:    map[string]float64{},
+		tripOccupancy:  map[string]int32{},
+		tripCongestion: map[string]int32{},
+		alerts:         []RTAlert{},
+		alertsByRoute:  map[string][]int{},
+		alertsByStop:   map[string][]int{},
+		alertsByTrip:   map[string][]int{},
 	}
-}
 
-// RefreshFromFeeds populates the wrapper from already-parsed FeedMessage objects
-// Useful for testing with local protobuf files
-func (w *GTFSRTWrapper) RefreshFromFeeds(vpFeed, tuFeed, saFeed *gtfsrtpb.FeedMessage) error {
-	w.trips = map[string]struct{}{}
-	w.vehicleTS = map[string]int64{}
-	w.tripRoute = map[string]string{}
-	w.tripDir = map[string]string{}
-	w.tripDate = map[string]string{}
-	w.onwardStops = map[string][]string{}
-	w.etaByStop = map[string]map[string]int64{}
-	w.etdByStop = map[string]map[string]int64{}
-	w.schedRelByStop = map[string]map[string]int32{}
-	w.tripVehicleRef = map[string]string{}
-	w.tripLat = map[string]float64{}
-	w.tripLon = map[string]float64{}
-	w.tripBearing = map[string]float64{}
-	w.tripOccupancy = map[string]int32{}
-	w.tripCongestion = map[string]int32{}
-	w.alerts = []RTAlert{}
-	w.alertsByRoute = map[string][]int{}
-	w.alertsByStop = map[string][]int{}
-	w.alertsByTrip = map[string][]int{}
-	w.headerTimestamp = 0
-
-	// Process each feed
-	w.parseTripUpdatesFeed(tuFeed)
-	w.parseVehiclePositionsFeed(vpFeed)
-	w.parseServiceAlertsFeed(saFeed)
-
-	if w.headerTimestamp == 0 {
-		w.headerTimestamp = time.Now().Unix()
-	}
-	return nil
-}
-
-// Refresh fetches and parses all GTFS-RT feeds
-func (w *GTFSRTWrapper) Refresh() error {
-	w.trips = map[string]struct{}{}
-	w.vehicleTS = map[string]int64{}
-	w.tripRoute = map[string]string{}
-	w.tripDir = map[string]string{}
-	w.tripDate = map[string]string{}
-	w.onwardStops = map[string][]string{}
-	w.etaByStop = map[string]map[string]int64{}
-	w.etdByStop = map[string]map[string]int64{}
-	w.schedRelByStop = map[string]map[string]int32{}
-	w.tripVehicleRef = map[string]string{}
-	w.tripLat = map[string]float64{}
-	w.tripLon = map[string]float64{}
-	w.tripBearing = map[string]float64{}
-	w.tripOccupancy = map[string]int32{}
-	w.tripCongestion = map[string]int32{}
-	w.alerts = []RTAlert{}
-	w.alertsByRoute = map[string][]int{}
-	w.alertsByStop = map[string][]int{}
-	w.alertsByTrip = map[string][]int{}
-	w.headerTimestamp = 0
-
-	// Fetch and parse each feed
-	if w.tripUpdatesURL != "" {
-		if fm, err := fetchFeed(w.tripUpdatesURL); err == nil && fm != nil {
-			w.parseTripUpdatesFeed(fm)
+	// Parse trip updates
+	if len(tripUpdatesData) > 0 {
+		var tuFeed gtfsrtpb.FeedMessage
+		if err := proto.Unmarshal(tripUpdatesData, &tuFeed); err != nil {
+			return nil, fmt.Errorf("failed to parse trip updates: %w", err)
 		}
-	}
-	if w.vehiclePositionsURL != "" {
-		if fm, err := fetchFeed(w.vehiclePositionsURL); err == nil && fm != nil {
-			w.parseVehiclePositionsFeed(fm)
-		}
-	}
-	if w.serviceAlertsURL != "" {
-		if fm, err := fetchFeed(w.serviceAlertsURL); err == nil && fm != nil {
-			w.parseServiceAlertsFeed(fm)
-		}
+		wrapper.parseTripUpdatesFeed(&tuFeed)
 	}
 
-	if w.headerTimestamp == 0 {
-		w.headerTimestamp = time.Now().Unix()
+	// Parse vehicle positions
+	if len(vehiclePositionsData) > 0 {
+		var vpFeed gtfsrtpb.FeedMessage
+		if err := proto.Unmarshal(vehiclePositionsData, &vpFeed); err != nil {
+			return nil, fmt.Errorf("failed to parse vehicle positions: %w", err)
+		}
+		wrapper.parseVehiclePositionsFeed(&vpFeed)
 	}
-	return nil
+
+	// Parse service alerts
+	if len(serviceAlertsData) > 0 {
+		var saFeed gtfsrtpb.FeedMessage
+		if err := proto.Unmarshal(serviceAlertsData, &saFeed); err != nil {
+			return nil, fmt.Errorf("failed to parse service alerts: %w", err)
+		}
+		wrapper.parseServiceAlertsFeed(&saFeed)
+	}
+
+	// Set timestamp from first available feed
+	if wrapper.headerTimestamp == 0 {
+		wrapper.headerTimestamp = time.Now().Unix()
+	}
+
+	return wrapper, nil
 }
 
 // Accessor methods
@@ -164,29 +119,18 @@ func (w *GTFSRTWrapper) GetAllMonitoredTrips() []string {
 
 func (w *GTFSRTWrapper) GetGTFSTripKeyForRealtimeTripKey(tripID string) string { return tripID }
 
-// TripKeyForConverter returns tripKey according to Config.Converter.TripKeyStrategy
+// TripKeyForConverter returns a composite trip key for GTFS static lookups.
+// Format: {agency}_{startDate}_{tripID} (or just tripID if agency/startDate empty)
 func TripKeyForConverter(tripID, agency, startDate string) string {
-	s := config.Config.Converter.TripKeyStrategy
-	switch s {
-	case "startDateTrip":
-		if startDate != "" {
-			return startDate + "_" + tripID
-		}
-	case "agencyTrip":
-		if agency != "" {
-			return agency + "_" + tripID
-		}
-	case "agencyStartDateTrip":
-		key := tripID
-		if startDate != "" {
-			key = startDate + "_" + key
-		}
-		if agency != "" {
-			key = agency + "_" + key
-		}
-		return key
+	// Default strategy: combine all available parts
+	key := tripID
+	if startDate != "" {
+		key = startDate + "_" + key
 	}
-	return tripID
+	if agency != "" {
+		key = agency + "_" + key
+	}
+	return key
 }
 
 func (w *GTFSRTWrapper) GetRouteIDForTrip(tripID string) string         { return w.tripRoute[tripID] }
@@ -463,4 +407,24 @@ func (w *GTFSRTWrapper) parseServiceAlertsFeed(fm *gtfsrtpb.FeedMessage) {
 			w.alertsByTrip[tid] = append(w.alertsByTrip[tid], idx)
 		}
 	}
+}
+
+// translatedStringToText returns the best-effort text from a TranslatedString
+func translatedStringToText(ts *gtfsrtpb.TranslatedString) string {
+	if ts == nil || len(ts.Translation) == 0 {
+		return ""
+	}
+	// Prefer entries with no language tag or first entry
+	var first string
+	for _, tr := range ts.Translation {
+		if tr.Text != nil {
+			if tr.Language == nil || *tr.Language == "" {
+				return *tr.Text
+			}
+			if first == "" {
+				first = *tr.Text
+			}
+		}
+	}
+	return first
 }

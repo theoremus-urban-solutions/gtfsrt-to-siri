@@ -14,11 +14,11 @@ import (
 // TestFormatter_VM_ToXML verifies VehicleMonitoring responses are correctly
 // formatted as valid XML with proper SIRI namespaces and UTF-8 encoding
 func TestFormatter_VM_ToXML(t *testing.T) {
-	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip")
+	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip", "SOFIA")
 	gtfsrtData := helpers.LoadGTFSRTFromLocal(t)
 
-	cfg := helpers.LoadTestConfig(t)
-	c := converter.NewConverter(gtfsIndex, gtfsrtData, *cfg)
+	opts := helpers.DefaultConverterOptions("SOFIA")
+	c := converter.NewConverter(gtfsIndex, gtfsrtData, opts)
 
 	response := c.GetCompleteVehicleMonitoringResponse()
 
@@ -67,11 +67,11 @@ func TestFormatter_VM_ToXML(t *testing.T) {
 // TestFormatter_VM_ToJSON verifies VehicleMonitoring responses are correctly
 // formatted as valid JSON with proper structure
 func TestFormatter_VM_ToJSON(t *testing.T) {
-	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip")
+	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip", "SOFIA")
 	gtfsrtData := helpers.LoadGTFSRTFromLocal(t)
 
-	cfg := helpers.LoadTestConfig(t)
-	c := converter.NewConverter(gtfsIndex, gtfsrtData, *cfg)
+	opts := helpers.DefaultConverterOptions("SOFIA")
+	c := converter.NewConverter(gtfsIndex, gtfsrtData, opts)
 
 	response := c.GetCompleteVehicleMonitoringResponse()
 
@@ -125,16 +125,16 @@ func TestFormatter_VM_ToJSON(t *testing.T) {
 
 // TestFormatter_ET_ToXML verifies EstimatedTimetable XML formatting
 func TestFormatter_ET_ToXML(t *testing.T) {
-	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip")
+	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip", "SOFIA")
 	gtfsrtData := helpers.LoadGTFSRTFromLocal(t)
 
-	cfg := helpers.LoadTestConfig(t)
-	c := converter.NewConverter(gtfsIndex, gtfsrtData, *cfg)
+	opts := helpers.DefaultConverterOptions("SOFIA")
+	c := converter.NewConverter(gtfsIndex, gtfsrtData, opts)
 
 	et := c.BuildEstimatedTimetable()
 
 	// Wrap in response
-	response := formatter.WrapEstimatedTimetableResponse(et, cfg.GTFS.AgencyID)
+	response := formatter.WrapEstimatedTimetableResponse(et, opts.AgencyID)
 
 	rb := formatter.NewResponseBuilder()
 	xmlBytes := rb.BuildXML(response)
@@ -160,14 +160,14 @@ func TestFormatter_ET_ToXML(t *testing.T) {
 
 // TestFormatter_ET_ToJSON verifies EstimatedTimetable JSON formatting
 func TestFormatter_ET_ToJSON(t *testing.T) {
-	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip")
+	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip", "SOFIA")
 	gtfsrtData := helpers.LoadGTFSRTFromLocal(t)
 
-	cfg := helpers.LoadTestConfig(t)
-	c := converter.NewConverter(gtfsIndex, gtfsrtData, *cfg)
+	opts := helpers.DefaultConverterOptions("SOFIA")
+	c := converter.NewConverter(gtfsIndex, gtfsrtData, opts)
 
 	et := c.BuildEstimatedTimetable()
-	response := formatter.WrapEstimatedTimetableResponse(et, cfg.GTFS.AgencyID)
+	response := formatter.WrapEstimatedTimetableResponse(et, opts.AgencyID)
 
 	rb := formatter.NewResponseBuilder()
 	jsonBytes := rb.BuildJSON(response)
@@ -192,15 +192,15 @@ func TestFormatter_ET_ToJSON(t *testing.T) {
 
 // TestFormatter_SX_ToXML verifies SituationExchange XML formatting
 func TestFormatter_SX_ToXML(t *testing.T) {
-	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip")
+	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip", "SOFIA")
 	gtfsrtData := helpers.LoadGTFSRTFromLocal(t)
 
-	cfg := helpers.LoadTestConfig(t)
-	c := converter.NewConverter(gtfsIndex, gtfsrtData, *cfg)
+	opts := helpers.DefaultConverterOptions("SOFIA")
+	c := converter.NewConverter(gtfsIndex, gtfsrtData, opts)
 
 	sx := c.BuildSituationExchange()
 	timestamp := gtfsrtData.GetTimestampForFeedMessage()
-	response := formatter.WrapSituationExchangeResponse(sx, timestamp, cfg.GTFS.AgencyID)
+	response := formatter.WrapSituationExchangeResponse(sx, timestamp, opts.AgencyID)
 
 	rb := formatter.NewResponseBuilder()
 	xmlBytes := rb.BuildXML(response)
@@ -224,15 +224,15 @@ func TestFormatter_SX_ToXML(t *testing.T) {
 
 // TestFormatter_SX_ToJSON verifies SituationExchange JSON formatting
 func TestFormatter_SX_ToJSON(t *testing.T) {
-	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip")
+	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip", "SOFIA")
 	gtfsrtData := helpers.LoadGTFSRTFromLocal(t)
 
-	cfg := helpers.LoadTestConfig(t)
-	c := converter.NewConverter(gtfsIndex, gtfsrtData, *cfg)
+	opts := helpers.DefaultConverterOptions("SOFIA")
+	c := converter.NewConverter(gtfsIndex, gtfsrtData, opts)
 
 	sx := c.BuildSituationExchange()
 	timestamp := gtfsrtData.GetTimestampForFeedMessage()
-	response := formatter.WrapSituationExchangeResponse(sx, timestamp, cfg.GTFS.AgencyID)
+	response := formatter.WrapSituationExchangeResponse(sx, timestamp, opts.AgencyID)
 
 	rb := formatter.NewResponseBuilder()
 	jsonBytes := rb.BuildJSON(response)
@@ -251,11 +251,11 @@ func TestFormatter_SX_ToJSON(t *testing.T) {
 
 // TestFormatter_XML_UTF8Encoding verifies UTF-8 encoding and special character handling
 func TestFormatter_XML_UTF8Encoding(t *testing.T) {
-	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip")
+	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip", "SOFIA")
 	gtfsrtData := helpers.LoadGTFSRTFromLocal(t)
 
-	cfg := helpers.LoadTestConfig(t)
-	c := converter.NewConverter(gtfsIndex, gtfsrtData, *cfg)
+	opts := helpers.DefaultConverterOptions("SOFIA")
+	c := converter.NewConverter(gtfsIndex, gtfsrtData, opts)
 
 	response := c.GetCompleteVehicleMonitoringResponse()
 
@@ -291,11 +291,11 @@ func TestFormatter_XML_UTF8Encoding(t *testing.T) {
 
 // TestFormatter_JSON_UTF8Encoding verifies JSON UTF-8 encoding
 func TestFormatter_JSON_UTF8Encoding(t *testing.T) {
-	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip")
+	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip", "SOFIA")
 	gtfsrtData := helpers.LoadGTFSRTFromLocal(t)
 
-	cfg := helpers.LoadTestConfig(t)
-	c := converter.NewConverter(gtfsIndex, gtfsrtData, *cfg)
+	opts := helpers.DefaultConverterOptions("SOFIA")
+	c := converter.NewConverter(gtfsIndex, gtfsrtData, opts)
 
 	response := c.GetCompleteVehicleMonitoringResponse()
 
@@ -313,13 +313,13 @@ func TestFormatter_JSON_UTF8Encoding(t *testing.T) {
 
 // TestFormatter_XML_EmptyVehicles verifies handling of empty vehicle list
 func TestFormatter_XML_EmptyVehicles(t *testing.T) {
-	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip")
+	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip", "SOFIA")
 
 	// Create empty GTFS-RT wrapper
 	emptyRT := helpers.LoadGTFSRTFromLocal(t)
 
-	cfg := helpers.LoadTestConfig(t)
-	c := converter.NewConverter(gtfsIndex, emptyRT, *cfg)
+	opts := helpers.DefaultConverterOptions("SOFIA")
+	c := converter.NewConverter(gtfsIndex, emptyRT, opts)
 
 	response := c.GetCompleteVehicleMonitoringResponse()
 
@@ -347,11 +347,11 @@ func TestFormatter_XML_EmptyVehicles(t *testing.T) {
 
 // TestFormatter_XML_ValidStructure verifies XML is well-formed
 func TestFormatter_XML_ValidStructure(t *testing.T) {
-	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip")
+	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip", "SOFIA")
 	gtfsrtData := helpers.LoadGTFSRTFromLocal(t)
 
-	cfg := helpers.LoadTestConfig(t)
-	c := converter.NewConverter(gtfsIndex, gtfsrtData, *cfg)
+	opts := helpers.DefaultConverterOptions("SOFIA")
+	c := converter.NewConverter(gtfsIndex, gtfsrtData, opts)
 
 	response := c.GetCompleteVehicleMonitoringResponse()
 
@@ -369,11 +369,11 @@ func TestFormatter_XML_ValidStructure(t *testing.T) {
 
 // TestFormatter_XML_vs_JSON_Equivalence verifies both formats contain same data
 func TestFormatter_XML_vs_JSON_Equivalence(t *testing.T) {
-	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip")
+	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip", "SOFIA")
 	gtfsrtData := helpers.LoadGTFSRTFromLocal(t)
 
-	cfg := helpers.LoadTestConfig(t)
-	c := converter.NewConverter(gtfsIndex, gtfsrtData, *cfg)
+	opts := helpers.DefaultConverterOptions("SOFIA")
+	c := converter.NewConverter(gtfsIndex, gtfsrtData, opts)
 
 	response := c.GetCompleteVehicleMonitoringResponse()
 

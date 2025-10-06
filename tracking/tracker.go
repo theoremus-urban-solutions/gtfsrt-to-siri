@@ -4,7 +4,6 @@ import (
 	"math"
 	"time"
 
-	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/config"
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/gtfs"
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/gtfsrt"
 )
@@ -43,13 +42,13 @@ type TrainState struct {
 
 var previousSnapshot *Snapshot
 
-func NewSnapshot(gtfsIdx *gtfs.GTFSIndex, rt *gtfsrt.GTFSRTWrapper, cfg config.AppConfig) (*Snapshot, error) {
+func NewSnapshot(gtfsIdx *gtfs.GTFSIndex, rt *gtfsrt.GTFSRTWrapper, agencyID string) *Snapshot {
 	ts := rt.GetTimestampForFeedMessage()
 	if previousSnapshot != nil && ts < previousSnapshot.gtfsrtTimestamp {
-		return previousSnapshot, nil
+		return previousSnapshot
 	}
 	if previousSnapshot != nil && ts == previousSnapshot.gtfsrtTimestamp {
-		return previousSnapshot, nil
+		return previousSnapshot
 	}
 	s := &Snapshot{
 		gtfsrtTimestamp: ts,
@@ -58,7 +57,7 @@ func NewSnapshot(gtfsIdx *gtfs.GTFSIndex, rt *gtfsrt.GTFSRTWrapper, cfg config.A
 		tripKeyToGTFS:   map[string]*gtfs.GTFSIndex{},
 	}
 	// Fill using RT data; interpolate between stops when possible
-	agency := cfg.GTFS.AgencyID
+	agency := agencyID
 	for _, rtTrip := range rt.GetAllMonitoredTrips() {
 		startDate := rt.GetStartDateForTrip(rtTrip)
 		tripKey := gtfsrt.TripKeyForConverter(rtTrip, agency, startDate)
@@ -147,7 +146,7 @@ func NewSnapshot(gtfsIdx *gtfs.GTFSIndex, rt *gtfsrt.GTFSRTWrapper, cfg config.A
 		s.tripKeyToGTFS[tripKey] = gtfsIdx
 	}
 	previousSnapshot = s
-	return s, nil
+	return s
 }
 
 func (s *Snapshot) GetLatitude(gtfsTripKey string) *float64 {

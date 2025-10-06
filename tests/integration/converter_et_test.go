@@ -9,11 +9,11 @@ import (
 
 // Test EstimatedTimetable conversion
 func TestConverter_EstimatedTimetable_Basic(t *testing.T) {
-	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip")
+	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip", "SOFIA")
 	gtfsrtData := helpers.LoadGTFSRTFromLocal(t)
 
-	cfg := helpers.LoadTestConfig(t)
-	c := converter.NewConverter(gtfsIndex, gtfsrtData, *cfg)
+	opts := helpers.DefaultConverterOptions("SOFIA")
+	c := converter.NewConverter(gtfsIndex, gtfsrtData, opts)
 
 	result := c.BuildEstimatedTimetable()
 
@@ -31,11 +31,11 @@ func TestConverter_EstimatedTimetable_Basic(t *testing.T) {
 
 // Test ET with recorded and estimated calls
 func TestConverter_ET_RecordedAndEstimatedCalls(t *testing.T) {
-	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip")
+	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip", "SOFIA")
 	gtfsrtData := helpers.LoadGTFSRTFromLocal(t)
 
-	cfg := helpers.LoadTestConfig(t)
-	c := converter.NewConverter(gtfsIndex, gtfsrtData, *cfg)
+	opts := helpers.DefaultConverterOptions("SOFIA")
+	c := converter.NewConverter(gtfsIndex, gtfsrtData, opts)
 
 	result := c.BuildEstimatedTimetable()
 
@@ -73,11 +73,11 @@ func TestConverter_ET_RecordedAndEstimatedCalls(t *testing.T) {
 
 // Test ET journey metadata (line ref, direction, operator)
 func TestConverter_ET_JourneyMetadata(t *testing.T) {
-	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip")
+	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip", "SOFIA")
 	gtfsrtData := helpers.LoadGTFSRTFromLocal(t)
 
-	cfg := helpers.LoadTestConfig(t)
-	c := converter.NewConverter(gtfsIndex, gtfsrtData, *cfg)
+	opts := helpers.DefaultConverterOptions("SOFIA")
+	c := converter.NewConverter(gtfsIndex, gtfsrtData, opts)
 
 	result := c.BuildEstimatedTimetable()
 
@@ -105,11 +105,11 @@ func TestConverter_ET_JourneyMetadata(t *testing.T) {
 
 // Test ET call structure (times, stop info)
 func TestConverter_ET_CallStructure(t *testing.T) {
-	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip")
+	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip", "SOFIA")
 	gtfsrtData := helpers.LoadGTFSRTFromLocal(t)
 
-	cfg := helpers.LoadTestConfig(t)
-	c := converter.NewConverter(gtfsIndex, gtfsrtData, *cfg)
+	opts := helpers.DefaultConverterOptions("SOFIA")
+	c := converter.NewConverter(gtfsIndex, gtfsrtData, opts)
 
 	result := c.BuildEstimatedTimetable()
 
@@ -150,11 +150,11 @@ func TestConverter_ET_CallStructure(t *testing.T) {
 
 // Test ET aimedTime vs expectedTime (delays)
 func TestConverter_ET_DelaysInCalls(t *testing.T) {
-	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip")
+	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip", "SOFIA")
 	gtfsrtData := helpers.LoadGTFSRTFromLocal(t)
 
-	cfg := helpers.LoadTestConfig(t)
-	c := converter.NewConverter(gtfsIndex, gtfsrtData, *cfg)
+	opts := helpers.DefaultConverterOptions("SOFIA")
+	c := converter.NewConverter(gtfsIndex, gtfsrtData, opts)
 
 	result := c.BuildEstimatedTimetable()
 

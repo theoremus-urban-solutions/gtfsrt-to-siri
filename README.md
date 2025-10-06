@@ -57,90 +57,171 @@ go build -o gtfsrt-to-siri ./cmd/gtfsrt-to-siri/
 
 ## Library Usage
 
-### Setup
+This library is **data-source agnostic** and designed for integration into servers (Kafka-based, HTTP APIs, etc.). You provide raw GTFS and GTFS-RT data, the library handles conversion.
+
+### Architecture Overview
+
+```
+Your Server
+    ↓ (fetch from MinIO/HTTP/files)
+GTFS zip bytes + GTFS-RT protobuf bytes
+    ↓ (parse once)
+GTFSIndex (cached in memory) + GTFSRTWrapper
+    ↓ (convert)
+Converter → SIRI Response (VM/ET/SX)
+```
+
+### Key Principle: Cache the GTFS Index
+
+**⚠️ IMPORTANT:** Parse GTFS once at startup and keep `*gtfs.GTFSIndex` in memory. GTFS is static data - parsing the zip on every request is wasteful (500ms-2s vs <1ms).
+
+### Server Integration Example
 
 ```go
 import (
-    gtfsrtsiri "github.com/theoremus-urban-solutions/gtfsrt-to-siri"
+    "github.com/theoremus-urban-solutions/gtfsrt-to-siri/converter"
+    "github.com/theoremus-urban-solutions/gtfsrt-to-siri/formatter"
+    "github.com/theoremus-urban-solutions/gtfsrt-to-siri/gtfs"
+    "github.com/theoremus-urban-solutions/gtfsrt-to-siri/gtfsrt"
 )
 
-// Load configuration
-gtfsrtsiri.InitLogging()
-if err := gtfsrtsiri.LoadAppConfig(); err != nil {
-    panic(err)
+type Server struct {
+    gtfsIndex *gtfs.GTFSIndex  // ✅ Parse once, reuse for all requests
+    opts      converter.ConverterOptions
 }
 
-// Select feed (or use default)
-gtfsCfg, rtCfg := gtfsrtsiri.SelectFeed("")
+// Initialize server - parse GTFS once
+func (s *Server) Init() error {
+    // 1. Fetch GTFS from your source (MinIO, HTTP, file, etc.)
+    gtfsZipBytes, err := fetchFromMinIO("path/to/gtfs.zip")
+    if err != nil {
+        return err
+    }
 
-// Initialize GTFS and GTFS-RT
-gtfs, _ := gtfsrtsiri.NewGTFSIndexFromConfig(gtfsCfg)
-rt := gtfsrtsiri.NewGTFSRTWrapper(
-    rtCfg.TripUpdatesURL,
-    rtCfg.VehiclePositionsURL,
-    rtCfg.ServiceAlertsURL,
-)
+    // 2. Parse GTFS once into memory (expensive operation)
+    s.gtfsIndex, err = gtfs.NewGTFSIndexFromBytes(gtfsZipBytes, "YOUR_AGENCY_ID")
+    if err != nil {
+        return err
+    }
 
-// Fetch latest data
-rt.Refresh()
+    // 3. Configure converter options
+    s.opts = converter.ConverterOptions{
+        AgencyID:       "YOUR_AGENCY_ID",
+        ReadIntervalMS: 30000,
+        FieldMutators: converter.FieldMutators{
+            StopPointRef:   []string{"OLD", "NEW"},  // optional
+            OriginRef:      []string{"OLD", "NEW"},  // optional
+            DestinationRef: []string{"OLD", "NEW"},  // optional
+        },
+    }
 
-// Create converter
-conv := gtfsrtsiri.NewConverter(gtfs, rt, gtfsrtsiri.Config)
-cache := gtfsrtsiri.NewConverterCache(conv)
+    return nil
+}
+
+// Handle each Kafka message / HTTP request
+func (s *Server) ProcessRealtimeData(protobufBytes []byte) ([]byte, error) {
+    // 1. Parse GTFS-RT protobuf (fast - only current data)
+    rt, err := gtfsrt.NewGTFSRTWrapper(
+        protobufBytes,  // TripUpdates
+        protobufBytes,  // VehiclePositions (or separate bytes)
+        nil,            // ServiceAlerts (optional)
+    )
+    if err != nil {
+        return nil, err
+    }
+
+    // 2. Create converter (reuses cached GTFS index)
+    conv := converter.NewConverter(s.gtfsIndex, rt, s.opts)
+
+    // 3. Generate SIRI response
+    response := conv.GetCompleteVehicleMonitoringResponse()
+    // or: et := conv.BuildEstimatedTimetable()
+    // or: sx := conv.BuildSituationExchange()
+
+    // 4. Format as XML or JSON
+    rb := formatter.NewResponseBuilder()
+    return rb.BuildJSON(response), nil  // or rb.BuildXML(response)
+}
+
+// Update GTFS when it changes (daily/weekly)
+func (s *Server) UpdateGTFS() error {
+    gtfsZipBytes, err := fetchFromMinIO("path/to/gtfs.zip")
+    if err != nil {
+        return err
+    }
+
+    newIndex, err := gtfs.NewGTFSIndexFromBytes(gtfsZipBytes, s.opts.AgencyID)
+    if err != nil {
+        return err
+    }
+
+    s.gtfsIndex = newIndex  // Atomic swap (consider mutex for concurrent access)
+    return nil
+}
 ```
 
-### Generate Responses
+### Quick Start: One-Shot Conversion
+
+For simple scripts or testing:
+
+```go
+// Fetch GTFS
+gtfsZipBytes, _ := os.ReadFile("gtfs.zip")
+gtfsIndex, _ := gtfs.NewGTFSIndexFromBytes(gtfsZipBytes, "AGENCY_ID")
+
+// Fetch GTFS-RT
+client := gtfsrt.NewClient()
+tuBytes, vpBytes, saBytes, _ := client.FetchAll(
+    "http://example.com/tripupdates",
+    "http://example.com/vehiclepositions",
+    "http://example.com/alerts",
+)
+
+// Create wrapper
+rt, _ := gtfsrt.NewGTFSRTWrapper(tuBytes, vpBytes, saBytes)
+
+// Convert
+opts := converter.ConverterOptions{AgencyID: "AGENCY_ID", ReadIntervalMS: 30000}
+conv := converter.NewConverter(gtfsIndex, rt, opts)
+response := conv.GetCompleteVehicleMonitoringResponse()
+
+// Format
+rb := formatter.NewResponseBuilder()
+xmlBytes := rb.BuildXML(response)
+```
+
+### API Reference
 
 **Vehicle Monitoring**
 ```go
-buf, err := cache.GetVehicleMonitoringResponse(map[string]string{}, "xml")
-// Returns SIRI VehicleMonitoring XML/JSON
+response := conv.GetCompleteVehicleMonitoringResponse()
+// Returns *siri.VehicleMonitoringResponse with all vehicles
 ```
 
 **Estimated Timetable**
 ```go
-params := map[string]string{
-    "monitoringref": "STOP_ID",  // optional
-    "lineref": "ROUTE_ID",       // optional
-    "directionref": "0",         // optional
-}
-buf, err := cache.GetEstimatedTimetableResponse(params, "json")
+et := conv.BuildEstimatedTimetable()
+// Filter if needed:
+filtered := formatter.FilterEstimatedTimetable(et, stopID, lineRef, directionRef)
+// Wrap in response:
+response := formatter.WrapEstimatedTimetableResponse(filtered, agencyID)
 ```
 
 **Situation Exchange**
 ```go
-buf, err := cache.GetSituationExchangeResponse("xml")
-// Returns SIRI SituationExchange with alerts
+sx := conv.BuildSituationExchange()
+timestamp := rt.GetTimestampForFeedMessage()
+response := formatter.WrapSituationExchangeResponse(sx, timestamp, agencyID)
 ```
 
-### Core Types
+### Performance Notes
 
-**Converter**
-```go
-type Converter struct {
-    GTFS   *GTFSIndex
-    GTFSRT *GTFSRTWrapper
-    Cfg    *AppConfig
-}
+- **GTFS parsing**: 500ms-2s (do once at startup)
+- **GTFS-RT parsing**: 10-50ms per message
+- **Conversion**: <1ms with cached GTFS index
+- **Formatting**: 5-20ms for XML/JSON
 
-// Build responses
-func (c *Converter) BuildVehicleMonitoring() []VehicleActivity
-func (c *Converter) BuildEstimatedTimetable() EstimatedTimetable
-func (c *Converter) BuildSituationExchange() []PtSituationElement
-```
-
-**ConverterCache**
-```go
-type ConverterCache struct {
-    converter *Converter
-    rb        *responseBuilder
-}
-
-// Generate formatted responses (XML/JSON)
-func (cc *ConverterCache) GetVehicleMonitoringResponse(params map[string]string, format string) ([]byte, error)
-func (cc *ConverterCache) GetEstimatedTimetableResponse(params map[string]string, format string) ([]byte, error)
-func (cc *ConverterCache) GetSituationExchangeResponse(format string) ([]byte, error)
-```
+**Memory footprint:** ~100-200MB for typical GTFS index (10-20K stops, 1K routes)
 
 ## Testing
 

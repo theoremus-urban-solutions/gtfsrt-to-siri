@@ -2,7 +2,9 @@ package gtfs
 
 import (
 	"archive/zip"
+	"bytes"
 	"encoding/csv"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -11,51 +13,105 @@ import (
 	"strings"
 )
 
-func (g *GTFSIndex) loadFromStaticZip(urlOrPath string) error {
-	// Check if it's a local file path or a URL
-	if strings.HasPrefix(urlOrPath, "http://") || strings.HasPrefix(urlOrPath, "https://") {
-		// Handle as URL
-		resp, err := http.Get(urlOrPath)
-		if err != nil {
-			return err
-		}
-		defer func() { _ = resp.Body.Close() }()
-		tmp, err := os.CreateTemp("", "gtfs-*.zip")
-		if err != nil {
-			return err
-		}
-		defer func() { _ = os.Remove(tmp.Name()) }()
-		if _, err := io.Copy(tmp, resp.Body); err != nil {
-			return err
-		}
-		if err := tmp.Close(); err != nil {
-			return err
-		}
-		return g.loadFromLocalZip(tmp.Name())
+// FetchGTFSData fetches GTFS data from a URL or file path and returns raw bytes.
+// This is a CLI helper function - library users should fetch data themselves.
+func FetchGTFSData(urlOrPath string) ([]byte, error) {
+	// Check if it's a file path
+	if info, err := os.Stat(urlOrPath); err == nil && !info.IsDir() {
+		return os.ReadFile(urlOrPath)
 	}
 
-	// Handle as local file path
-	return g.loadFromLocalZip(urlOrPath)
+	// Treat as URL
+	resp, err := http.Get(urlOrPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch GTFS from %s: %w", urlOrPath, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("HTTP %d fetching GTFS from %s", resp.StatusCode, urlOrPath)
+	}
+
+	return io.ReadAll(resp.Body)
 }
 
-// loadFromLocalZip opens a local GTFS zip file and consumes required CSVs.
-func (g *GTFSIndex) loadFromLocalZip(path string) error {
-	zr, err := zip.OpenReader(path)
+// NewGTFSIndexFromBytes creates a GTFS index from raw zip bytes.
+// This is the primary constructor for data-source agnostic loading.
+//
+// Example:
+//
+//	zipBytes := fetchGTFSFromYourSource() // HTTP, MinIO, files, etc.
+//	index, err := gtfs.NewGTFSIndexFromBytes(zipBytes, "AGENCY_ID")
+func NewGTFSIndexFromBytes(zipData []byte, agencyID string) (*GTFSIndex, error) {
+	return NewGTFSIndexFromReader(bytes.NewReader(zipData), int64(len(zipData)), agencyID)
+}
+
+// NewGTFSIndexFromReader creates a GTFS index from an io.ReaderAt.
+// Use this for streaming or when you already have an open reader.
+//
+// Example:
+//
+//	file, _ := os.Open("gtfs.zip")
+//	defer file.Close()
+//	stat, _ := file.Stat()
+//	index, err := gtfs.NewGTFSIndexFromReader(file, stat.Size(), "AGENCY_ID")
+func NewGTFSIndexFromReader(r io.ReaderAt, size int64, agencyID string) (*GTFSIndex, error) {
+	// Create zip reader from ReaderAt
+	zipReader, err := zip.NewReader(r, size)
 	if err != nil {
-		return err
+		return nil, fmt.Errorf("failed to open GTFS zip: %w", err)
 	}
-	defer func() { _ = zr.Close() }()
-	for _, f := range zr.File {
+
+	// Initialize index
+	index := &GTFSIndex{
+		agencyID:            agencyID,
+		routeShortNames:     map[string]string{},
+		routeTypes:          map[string]int{},
+		routes:              map[string]struct{}{},
+		tripToRoute:         map[string]string{},
+		tripHeadsign:        map[string]string{},
+		tripOriginStop:      map[string]string{},
+		tripDestStop:        map[string]string{},
+		tripDirection:       map[string]string{},
+		tripShapeID:         map[string]string{},
+		tripBlockID:         map[string]string{},
+		TripStopSeq:         map[string][]string{},
+		tripStopIdx:         map[string]map[string]int{},
+		stopNames:           map[string]string{},
+		stopCoord:           map[string][2]float64{},
+		ShapePoints:         map[string][][2]float64{},
+		ShapeCumKM:          map[string][]float64{},
+		stopTimePickupType:  map[string]map[string]int{},
+		stopTimeDropOffType: map[string]map[string]int{},
+		stopTimeArrival:     map[string]map[string]string{},
+		stopTimeDeparture:   map[string]map[string]string{},
+	}
+
+	// Parse GTFS files from zip
+	if err := index.parseGTFSFiles(zipReader); err != nil {
+		return nil, fmt.Errorf("failed to parse GTFS: %w", err)
+	}
+
+	return index, nil
+}
+
+// parseGTFSFiles reads all required GTFS files from zip
+func (g *GTFSIndex) parseGTFSFiles(zipReader *zip.Reader) error {
+	for _, f := range zipReader.File {
 		name := strings.ToLower(f.Name)
-		if name == "routes.txt" || name == "trips.txt" || name == "stops.txt" || name == "stop_times.txt" || name == "agency.txt" || name == "shapes.txt" {
+		if name == "routes.txt" || name == "trips.txt" || name == "stops.txt" ||
+			name == "stop_times.txt" || name == "agency.txt" || name == "shapes.txt" {
 			if err := g.consumeCSV(f); err != nil {
 				return err
 			}
 		}
 	}
+
+	// Calculate cumulative distances for shapes
 	for shapeID, pts := range g.ShapePoints {
 		g.ShapeCumKM[shapeID] = cumulativeKM(pts)
 	}
+
 	return nil
 }
 

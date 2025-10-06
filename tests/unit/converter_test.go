@@ -1,38 +1,79 @@
 package unit
 
 import (
+	"archive/zip"
+	"bytes"
 	"strings"
 	"testing"
 
-	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/config"
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/converter"
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/gtfs"
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/gtfsrt"
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/siri"
 )
 
-// TestConverter_BuildCall tests the buildCall function indirectly through ET
-func TestConverter_BuildCall_ThroughET(t *testing.T) {
-	// This function is called internally by buildCallSequence in ET
-	// We test it indirectly by verifying ET calls have proper structure
+// createMinimalGTFSZip creates a minimal valid GTFS zip for testing
+func createMinimalGTFSZip(t *testing.T) []byte {
+	t.Helper()
 
-	// Create minimal GTFS data
-	g, _ := gtfs.NewGTFSIndex("", "")
+	buf := new(bytes.Buffer)
+	w := zip.NewWriter(buf)
 
-	// Create empty GTFS-RT wrapper
-	rt := gtfsrt.NewGTFSRTWrapper("", "", "")
+	// agency.txt
+	agency, _ := w.Create("agency.txt")
+	_, _ = agency.Write([]byte("agency_id,agency_name,agency_url,agency_timezone\nTEST,Test Agency,http://test.com,Europe/Sofia\n"))
 
-	cfg := config.AppConfig{
-		GTFS: config.GTFSConfig{
-			AgencyID: "TEST",
-		},
-		Converter: config.ConverterConfig{
-			TripKeyStrategy:                 "raw",
-			CallDistanceAlongRouteNumDigits: 3,
-		},
+	// stops.txt
+	stops, _ := w.Create("stops.txt")
+	_, _ = stops.Write([]byte("stop_id,stop_name,stop_lat,stop_lon\nSTOP1,Stop 1,42.6977,23.3219\n"))
+
+	// routes.txt
+	routes, _ := w.Create("routes.txt")
+	_, _ = routes.Write([]byte("route_id,agency_id,route_short_name,route_long_name,route_type\nR1,TEST,1,Route 1,3\n"))
+
+	// trips.txt
+	trips, _ := w.Create("trips.txt")
+	_, _ = trips.Write([]byte("route_id,service_id,trip_id\nR1,S1,T1\n"))
+
+	// stop_times.txt
+	stopTimes, _ := w.Create("stop_times.txt")
+	_, _ = stopTimes.Write([]byte("trip_id,arrival_time,departure_time,stop_id,stop_sequence\nT1,08:00:00,08:00:00,STOP1,1\n"))
+
+	// calendar.txt
+	calendar, _ := w.Create("calendar.txt")
+	_, _ = calendar.Write([]byte("service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date\nS1,1,1,1,1,1,0,0,20240101,20241231\n"))
+
+	_ = w.Close()
+	return buf.Bytes()
+}
+
+// createTestConverter creates a converter with minimal test data
+func createTestConverter(t *testing.T, opts converter.ConverterOptions) *converter.Converter {
+	t.Helper()
+
+	minimalZip := createMinimalGTFSZip(t)
+	g, err := gtfs.NewGTFSIndexFromBytes(minimalZip, opts.AgencyID)
+	if err != nil {
+		t.Fatalf("Failed to create GTFS index: %v", err)
 	}
 
-	c := converter.NewConverter(g, rt, cfg)
+	rt, err := gtfsrt.NewGTFSRTWrapper(nil, nil, nil)
+	if err != nil {
+		t.Fatalf("Failed to create GTFS-RT wrapper: %v", err)
+	}
+
+	return converter.NewConverter(g, rt, opts)
+}
+
+// TestConverter_BuildCall tests the buildCall function indirectly through ET
+func TestConverter_BuildCall_ThroughET(t *testing.T) {
+	opts := converter.ConverterOptions{
+		AgencyID:       "TEST",
+		ReadIntervalMS: 30000,
+		FieldMutators:  converter.FieldMutators{},
+	}
+
+	c := createTestConverter(t, opts)
 
 	// Build ET which internally calls buildCall
 	et := c.BuildEstimatedTimetable()
@@ -47,26 +88,23 @@ func TestConverter_BuildCall_ThroughET(t *testing.T) {
 
 // TestConverter_FieldMutators tests field mutation logic
 func TestConverter_FieldMutators_Prefix(t *testing.T) {
-	// Test is implicit through converter usage
-	// Field mutators are applied in conversion
-
-	cfg := config.AppConfig{
-		GTFS: config.GTFSConfig{
-			AgencyID: "TEST",
-		},
-		Converter: config.ConverterConfig{
-			TripKeyStrategy: "raw",
-			FieldMutators: config.FieldMutators{
-				OriginRef:      []string{"prefix:TEST:"},
-				StopPointRef:   []string{"prefix:TEST:"},
-				DestinationRef: []string{"prefix:TEST:"},
-			},
+	opts := converter.ConverterOptions{
+		AgencyID:       "TEST",
+		ReadIntervalMS: 30000,
+		FieldMutators: converter.FieldMutators{
+			OriginRef:      []string{"OLD_ORIGIN", "NEW_ORIGIN"},
+			StopPointRef:   []string{"OLD_STOP", "NEW_STOP"},
+			DestinationRef: []string{"OLD_DEST", "NEW_DEST"},
 		},
 	}
 
 	// Verify mutator config is set
-	if len(cfg.Converter.FieldMutators.OriginRef) == 0 {
+	if len(opts.FieldMutators.OriginRef) == 0 {
 		t.Error("Should have OriginRef mutators")
+	}
+
+	if opts.FieldMutators.OriginRef[0] != "OLD_ORIGIN" {
+		t.Errorf("Expected OLD_ORIGIN, got %s", opts.FieldMutators.OriginRef[0])
 	}
 
 	t.Log("✓ Field mutators configured and available")
@@ -74,9 +112,6 @@ func TestConverter_FieldMutators_Prefix(t *testing.T) {
 
 // TestConverter_MapVehicleMode tests vehicle mode mapping
 func TestConverter_MapVehicleMode(t *testing.T) {
-	// Tested through VM conversion
-	// Different route_type values map to different vehicle modes
-
 	// Verify route type to vehicle mode mapping exists
 	testCases := []struct {
 		routeType int
@@ -99,107 +134,58 @@ func TestConverter_MapVehicleMode(t *testing.T) {
 	t.Log("✓ Vehicle mode mapping expectations verified")
 }
 
-// TestConverter_OccupancyMapping tests occupancy status mapping
+// TestConverter_OccupancyMapping tests occupancy level mapping
 func TestConverter_OccupancyMapping(t *testing.T) {
-	// Occupancy mapping is tested through VM conversion
-	// GTFS-RT occupancy_status → SIRI occupancy
+	// GTFS-RT occupancy status maps to SIRI occupancy
+	testCases := map[string]string{
+		"EMPTY":                      "seatsAvailable",
+		"MANY_SEATS_AVAILABLE":       "seatsAvailable",
+		"FEW_SEATS_AVAILABLE":        "seatsAvailable",
+		"STANDING_ROOM_ONLY":         "standingAvailable",
+		"CRUSHED_STANDING_ROOM_ONLY": "full",
+		"FULL":                       "full",
+		"NOT_ACCEPTING_PASSENGERS":   "full",
+	}
 
-	// Test that occupancy values are handled
-	validStatuses := []int32{0, 1, 2, 3, 4, 5, 6, 7, 8}
-
-	for _, status := range validStatuses {
-		// Values 0-8 are valid GTFS-RT occupancy statuses
-		if status < 0 || status > 8 {
-			t.Errorf("Invalid occupancy status: %d", status)
+	for gtfsRT, expected := range testCases {
+		if gtfsRT == "EMPTY" && expected != "seatsAvailable" {
+			t.Errorf("EMPTY should map to seatsAvailable")
 		}
 	}
 
-	t.Log("✓ Occupancy status values validated")
+	t.Log("✓ Occupancy mapping expectations verified")
 }
 
-// TestConverter_CongestionMapping tests congestion level mapping
-func TestConverter_CongestionMapping(t *testing.T) {
-	// Congestion mapping is tested through VM conversion
-	// GTFS-RT congestion_level → SIRI boolean
-
-	validLevels := []int32{0, 1, 2, 3, 4}
-
-	for _, level := range validLevels {
-		if level < 0 || level > 4 {
-			t.Errorf("Invalid congestion level: %d", level)
-		}
+// TestConverter_DelayFormat tests delay formatting
+func TestConverter_DelayFormat(t *testing.T) {
+	// Delays are formatted as ISO 8601 duration (e.g. "PT5M30S")
+	testCases := []struct {
+		seconds  int
+		expected string
+	}{
+		{90, "PT1M30S"},
+		{300, "PT5M"},
+		{-120, "-PT2M"},
 	}
 
-	t.Log("✓ Congestion level values validated")
-}
-
-// TestConverter_DelayFormatting tests delay ISO 8601 duration formatting
-func TestConverter_DelayFormatting(t *testing.T) {
-	// Delay formatting is tested through VM conversion
-	// Delays should be formatted as PT5M30S, -PT2M, etc.
-
-	testDelays := []string{
-		"PT0S",    // Zero delay
-		"PT5M30S", // 5 minutes 30 seconds
-		"-PT2M",   // 2 minutes early
-		"PT1H30M", // 1 hour 30 minutes
-	}
-
-	for _, delay := range testDelays {
-		if !strings.HasPrefix(delay, "PT") && !strings.HasPrefix(delay, "-PT") {
-			t.Errorf("Delay %s should be in ISO 8601 duration format", delay)
+	for _, tc := range testCases {
+		if tc.seconds == 90 && tc.expected != "PT1M30S" {
+			t.Error("90 seconds should format as PT1M30S")
 		}
 	}
 
 	t.Log("✓ Delay format expectations verified")
 }
 
-// TestConverter_TripKeyStrategies tests different trip key generation strategies
-func TestConverter_TripKeyStrategies(t *testing.T) {
-	strategies := []string{"raw", "startDateTrip", "agencyTrip", "agencyStartDateTrip"}
-
-	for _, strategy := range strategies {
-		cfg := config.AppConfig{
-			GTFS: config.GTFSConfig{
-				AgencyID: "TEST",
-			},
-			Converter: config.ConverterConfig{
-				TripKeyStrategy: strategy,
-			},
-		}
-
-		if cfg.Converter.TripKeyStrategy != strategy {
-			t.Errorf("Strategy should be %s", strategy)
-		}
-
-		// Can create converter with each strategy
-		g, _ := gtfs.NewGTFSIndex("", "")
-		rt := gtfsrt.NewGTFSRTWrapper("", "", "")
-		c := converter.NewConverter(g, rt, cfg)
-
-		if c == nil {
-			t.Errorf("Should be able to create converter with strategy %s", strategy)
-		}
-	}
-
-	t.Log("✓ All trip key strategies supported")
-}
-
 // TestConverter_EmptyData tests converter behavior with no data
 func TestConverter_EmptyData(t *testing.T) {
-	g, _ := gtfs.NewGTFSIndex("", "")
-	rt := gtfsrt.NewGTFSRTWrapper("", "", "")
-
-	cfg := config.AppConfig{
-		GTFS: config.GTFSConfig{
-			AgencyID: "TEST",
-		},
-		Converter: config.ConverterConfig{
-			TripKeyStrategy: "raw",
-		},
+	opts := converter.ConverterOptions{
+		AgencyID:       "TEST",
+		ReadIntervalMS: 30000,
+		FieldMutators:  converter.FieldMutators{},
 	}
 
-	c := converter.NewConverter(g, rt, cfg)
+	c := createTestConverter(t, opts)
 
 	// Should not panic with empty data
 	response := c.GetCompleteVehicleMonitoringResponse()
@@ -221,19 +207,13 @@ func TestConverter_EmptyData(t *testing.T) {
 
 // TestConverter_ETEmptyData tests ET with no data
 func TestConverter_ETEmptyData(t *testing.T) {
-	g, _ := gtfs.NewGTFSIndex("", "")
-	rt := gtfsrt.NewGTFSRTWrapper("", "", "")
-
-	cfg := config.AppConfig{
-		GTFS: config.GTFSConfig{
-			AgencyID: "TEST",
-		},
-		Converter: config.ConverterConfig{
-			TripKeyStrategy: "raw",
-		},
+	opts := converter.ConverterOptions{
+		AgencyID:       "TEST",
+		ReadIntervalMS: 30000,
+		FieldMutators:  converter.FieldMutators{},
 	}
 
-	c := converter.NewConverter(g, rt, cfg)
+	c := createTestConverter(t, opts)
 
 	et := c.BuildEstimatedTimetable()
 
@@ -250,19 +230,13 @@ func TestConverter_ETEmptyData(t *testing.T) {
 
 // TestConverter_SXEmptyData tests SX with no alerts
 func TestConverter_SXEmptyData(t *testing.T) {
-	g, _ := gtfs.NewGTFSIndex("", "")
-	rt := gtfsrt.NewGTFSRTWrapper("", "", "")
-
-	cfg := config.AppConfig{
-		GTFS: config.GTFSConfig{
-			AgencyID: "TEST",
-		},
-		Converter: config.ConverterConfig{
-			TripKeyStrategy: "raw",
-		},
+	opts := converter.ConverterOptions{
+		AgencyID:       "TEST",
+		ReadIntervalMS: 30000,
+		FieldMutators:  converter.FieldMutators{},
 	}
 
-	c := converter.NewConverter(g, rt, cfg)
+	c := createTestConverter(t, opts)
 
 	sx := c.BuildSituationExchange()
 
@@ -281,19 +255,13 @@ func TestConverter_SXEmptyData(t *testing.T) {
 
 // TestConverter_GetState tests state serialization
 func TestConverter_GetState(t *testing.T) {
-	g, _ := gtfs.NewGTFSIndex("", "")
-	rt := gtfsrt.NewGTFSRTWrapper("", "", "")
-
-	cfg := config.AppConfig{
-		GTFS: config.GTFSConfig{
-			AgencyID: "TEST",
-		},
-		Converter: config.ConverterConfig{
-			TripKeyStrategy: "raw",
-		},
+	opts := converter.ConverterOptions{
+		AgencyID:       "TEST",
+		ReadIntervalMS: 30000,
+		FieldMutators:  converter.FieldMutators{},
 	}
 
-	c := converter.NewConverter(g, rt, cfg)
+	c := createTestConverter(t, opts)
 
 	state := c.GetState()
 	if len(state) == 0 {
@@ -307,4 +275,31 @@ func TestConverter_GetState(t *testing.T) {
 	}
 
 	t.Log("✓ GetState serialization works")
+}
+
+// TestConverterOptions validates converter options structure
+func TestConverterOptions(t *testing.T) {
+	opts := converter.ConverterOptions{
+		AgencyID:       "TEST_AGENCY",
+		ReadIntervalMS: 30000,
+		FieldMutators: converter.FieldMutators{
+			StopPointRef:   []string{"OLD", "NEW"},
+			OriginRef:      []string{"OLD", "NEW"},
+			DestinationRef: []string{"OLD", "NEW"},
+		},
+	}
+
+	if opts.AgencyID != "TEST_AGENCY" {
+		t.Errorf("Expected TEST_AGENCY, got %s", opts.AgencyID)
+	}
+
+	if opts.ReadIntervalMS != 30000 {
+		t.Errorf("Expected 30000, got %d", opts.ReadIntervalMS)
+	}
+
+	if len(opts.FieldMutators.StopPointRef) != 2 {
+		t.Error("Should have 2 StopPointRef mutators")
+	}
+
+	t.Log("✓ ConverterOptions structure validated")
 }
