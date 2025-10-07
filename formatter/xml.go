@@ -527,14 +527,28 @@ func writeSituationExchangeXML(b *strings.Builder, sx siri.SituationExchange) {
 			b.WriteString(xmlEscape(el.ReportType))
 			b.WriteString("</ReportType>")
 		}
-		if el.Summary != "" {
-			b.WriteString("<Summary>")
-			b.WriteString(xmlEscape(el.Summary))
+		// Multi-language summaries
+		for _, summary := range el.Summaries {
+			b.WriteString("<Summary")
+			if summary.Lang != "" {
+				b.WriteString(" xml:lang=\"")
+				b.WriteString(xmlEscape(summary.Lang))
+				b.WriteString("\"")
+			}
+			b.WriteString(">")
+			b.WriteString(xmlEscape(summary.Text))
 			b.WriteString("</Summary>")
 		}
-		if el.Description != "" {
-			b.WriteString("<Description>")
-			b.WriteString(xmlEscape(el.Description))
+		// Multi-language descriptions
+		for _, desc := range el.Descriptions {
+			b.WriteString("<Description")
+			if desc.Lang != "" {
+				b.WriteString(" xml:lang=\"")
+				b.WriteString(xmlEscape(desc.Lang))
+				b.WriteString("\"")
+			}
+			b.WriteString(">")
+			b.WriteString(xmlEscape(desc.Text))
 			b.WriteString("</Description>")
 		}
 		// Affects block
@@ -626,6 +640,22 @@ func writeSituationExchangeXML(b *strings.Builder, sx siri.SituationExchange) {
 			b.WriteString("</StopPoints>")
 		}
 		b.WriteString("</Affects>")
+		// InfoLinks block
+		if len(el.InfoLinks) > 0 {
+			b.WriteString("<InfoLinks>")
+			for _, link := range el.InfoLinks {
+				b.WriteString("<InfoLink")
+				if link.Lang != "" {
+					b.WriteString(" xml:lang=\"")
+					b.WriteString(xmlEscape(link.Lang))
+					b.WriteString("\"")
+				}
+				b.WriteString(">")
+				b.WriteString(xmlEscape(link.URL))
+				b.WriteString("</InfoLink>")
+			}
+			b.WriteString("</InfoLinks>")
+		}
 		// Consequences block
 		if len(el.Consequences) > 0 {
 			b.WriteString("<Consequences>")

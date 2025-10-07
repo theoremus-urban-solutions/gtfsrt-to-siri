@@ -12,10 +12,7 @@ func (c *Converter) BuildSituationExchange() siri.SituationExchange {
 	now := c.gtfsrt.GetTimestampForFeedMessage()
 	for _, a := range alerts {
 		severity, effectPrefix := mapGTFSRTEffectToSIRISeverity(a.Effect)
-		description := a.Description
-		if effectPrefix != "" {
-			description = effectPrefix + ": " + a.Description
-		}
+
 		// Build situation number with codespace prefix
 		codespace := c.opts.AgencyID
 		if codespace == "" {
@@ -23,14 +20,56 @@ func (c *Converter) BuildSituationExchange() siri.SituationExchange {
 		}
 		situationNumber := codespace + ":SituationNumber:" + a.ID
 
+		// Build localized summaries with both Cause and Effect
+		causeEN, causeBG := mapGTFSRTCauseToSummaryCause(a.Cause)
+		effectEN, effectBG := mapGTFSRTEffectToSIRISummaryEffect(a.Effect)
+
+		summaries := []siri.LocalizedText{}
+		if causeEN != "" || effectEN != "" {
+			summaryEN := "Cause: " + causeEN + "; Effect: " + effectEN
+			summaries = append(summaries, siri.LocalizedText{Lang: "en", Text: summaryEN})
+		}
+		if causeBG != "" || effectBG != "" {
+			summaryBG := "Причина: " + causeBG + "; Ефект: " + effectBG
+			summaries = append(summaries, siri.LocalizedText{Lang: "bg", Text: summaryBG})
+		}
+
+		// Build localized descriptions
+		descriptions := []siri.LocalizedText{}
+		if len(a.DescriptionByLang) > 0 {
+			for lang, desc := range a.DescriptionByLang {
+				if desc != "" {
+					descriptions = append(descriptions, siri.LocalizedText{Lang: lang, Text: desc})
+				}
+			}
+		} else if a.Description != "" {
+			// Fallback to single description with effect prefix if available
+			description := a.Description
+			if effectPrefix != "" {
+				description = effectPrefix + ": " + a.Description
+			}
+			descriptions = append(descriptions, siri.LocalizedText{Lang: "en", Text: description})
+		}
+
+		// Build InfoLinks from URLs
+		infoLinks := []siri.InfoLink{}
+		if len(a.URLByLang) > 0 {
+			for lang, url := range a.URLByLang {
+				if url != "" {
+					infoLinks = append(infoLinks, siri.InfoLink{Lang: lang, URL: url})
+				}
+			}
+		}
+
 		el := siri.PtSituationElement{
 			ParticipantRef:  codespace,
 			SituationNumber: situationNumber,
 			SourceType:      "directReport",
 			Severity:        severity,
 			ReportType:      mapGTFSRTCauseToReportType(a.Cause),
-			Summary:         mapGTFSRTCauseToSummary(a.Cause),
-			Description:     description,
+			Summaries:       summaries,
+			Descriptions:    descriptions,
+			InfoLinks:       infoLinks,
 		}
 		if a.Start > 0 {
 			el.PublicationWindow.StartTime = utils.Iso8601FromUnixSeconds(a.Start)
@@ -130,36 +169,64 @@ func mapGTFSRTEffectToSIRISeverity(gtfsrtEffect string) (string, string) {
 	}
 }
 
-func mapGTFSRTCauseToSummary(gtfsrtCause string) string {
+func mapGTFSRTCauseToSummaryCause(gtfsrtCause string) (string, string) {
 	switch gtfsrtCause {
 	case "UNKNOWN_CAUSE":
-		return "Unknown cause"
+		return "Unknown", "Неизвестно"
 	case "OTHER_CAUSE":
-		return "Other cause"
+		return "Other", "Друго"
 	case "TECHNICAL_PROBLEM":
-		return "Technical problem"
+		return "Technical problem", "Технически проблем"
 	case "STRIKE":
-		return "Strike or unavailable staff"
+		return "Strike or unavailable staff", "Стачка или недостиг на персонал"
 	case "DEMONSTRATION":
-		return "Demonstration"
+		return "Demonstration", "Демонстрация"
 	case "ACCIDENT":
-		return "Accident"
+		return "Accident", "Авария"
 	case "HOLIDAY":
-		return "Holiday"
+		return "Holiday", "Праздник"
 	case "WEATHER":
-		return "Weather related"
+		return "Weather", "Лошо време"
 	case "MAINTENANCE":
-		return "Maintenance"
+		return "Maintenance", "Поддръжка"
 	case "CONSTRUCTION":
-		return "Construction work"
+		return "Construction work", "Строителна дейност"
 	case "POLICE_ACTIVITY":
-		return "Police activity"
+		return "Police activity", "Полицейска дейност"
 	case "MEDICAL_EMERGENCY":
-		return "Medical emergency"
+		return "Medical emergency", "Медицинска авария"
 	case "EQUIPMENT_FAILURE":
-		return "Equipment failure"
+		return "Equipment failure", "Проблем с оборудване"
 	default:
-		return "Unknown cause"
+		return "Unknown", "Неизвестно"
+	}
+}
+func mapGTFSRTEffectToSIRISummaryEffect(gtfsrtEffect string) (string, string) {
+	switch gtfsrtEffect {
+	case "NO_SERVICE":
+		return "No service", "Не се изпълнява"
+	case "REDUCED_SERVICE":
+		return "Reduced service", "Понижено обслужване"
+	case "SIGNIFICANT_DELAYS":
+		return "Significant delays", "Значителни закъснения"
+	case "DETOUR":
+		return "Detour", "Отклонение"
+	case "ADDITIONAL_SERVICE":
+		return "Additional service", "Допълнително обслужване"
+	case "MODIFIED_SERVICE":
+		return "Modified service", "Модифицирано обслужване"
+	case "OTHER_EFFECT":
+		return "Other", "Друго"
+	case "UNKNOWN_EFFECT":
+		return "Unknown", "Неизвестно"
+	case "STOP_MOVED":
+		return "Stop moved", "Преместена спирка"
+	case "NO_EFFECT":
+		return "No impact", "Няма ефект"
+	case "ACCESSIBILITY_ISSUE":
+		return "Accessibility issue", "Проблем с достъпността"
+	default:
+		return "undefined", "Неизвестно"
 	}
 }
 

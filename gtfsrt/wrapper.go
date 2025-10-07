@@ -353,7 +353,10 @@ func (w *GTFSRTWrapper) parseServiceAlertsFeed(fm *gtfsrtpb.FeedMessage) {
 			continue
 		}
 		a := e.Alert
-		ra := RTAlert{}
+		ra := RTAlert{
+			DescriptionByLang: make(map[string]string),
+			URLByLang:         make(map[string]string),
+		}
 		if e.Id != nil {
 			ra.ID = *e.Id
 		}
@@ -362,6 +365,12 @@ func (w *GTFSRTWrapper) parseServiceAlertsFeed(fm *gtfsrtpb.FeedMessage) {
 		}
 		if a.DescriptionText != nil {
 			ra.Description = translatedStringToText(a.DescriptionText)
+			// Extract all language translations
+			ra.DescriptionByLang = translatedStringToMap(a.DescriptionText)
+		}
+		if a.Url != nil {
+			// Extract all language URLs
+			ra.URLByLang = translatedStringToMap(a.Url)
 		}
 		if a.Cause != nil {
 			ra.Cause = a.Cause.String()
@@ -427,4 +436,22 @@ func translatedStringToText(ts *gtfsrtpb.TranslatedString) string {
 		}
 	}
 	return first
+}
+
+// translatedStringToMap returns all translations as a map of language -> text
+func translatedStringToMap(ts *gtfsrtpb.TranslatedString) map[string]string {
+	result := make(map[string]string)
+	if ts == nil || len(ts.Translation) == 0 {
+		return result
+	}
+	for _, tr := range ts.Translation {
+		if tr.Text != nil {
+			lang := "unknown"
+			if tr.Language != nil && *tr.Language != "" {
+				lang = *tr.Language
+			}
+			result[lang] = *tr.Text
+		}
+	}
+	return result
 }
