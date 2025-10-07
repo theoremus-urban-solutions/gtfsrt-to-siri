@@ -169,13 +169,10 @@ For simple scripts or testing:
 gtfsZipBytes, _ := os.ReadFile("gtfs.zip")
 gtfsIndex, _ := gtfs.NewGTFSIndexFromBytes(gtfsZipBytes, "AGENCY_ID")
 
-// Fetch GTFS-RT
-client := gtfsrt.NewClient()
-tuBytes, vpBytes, saBytes, _ := client.FetchAll(
-    "http://example.com/tripupdates",
-    "http://example.com/vehiclepositions",
-    "http://example.com/alerts",
-)
+// Fetch GTFS-RT (implement your own fetching logic)
+tuBytes, _ := fetchFromHTTP("http://example.com/tripupdates")
+vpBytes, _ := fetchFromHTTP("http://example.com/vehiclepositions")
+saBytes, _ := fetchFromHTTP("http://example.com/alerts")
 
 // Create wrapper
 rt, _ := gtfsrt.NewGTFSRTWrapper(tuBytes, vpBytes, saBytes)

@@ -88,8 +88,8 @@ func main() {
 		}
 
 		// Fetch GTFS-RT data as raw bytes
-		client := gtfsrt.NewClient()
-		tuBytes, vpBytes, alertBytes, err := client.FetchAll(tu, vp, alerts)
+		f := newFetcher()
+		tuBytes, vpBytes, alertBytes, err := f.fetchAll(tu, vp, alerts)
 		if err != nil {
 			panic(fmt.Sprintf("Failed to fetch GTFS-RT: %v", err))
 		}

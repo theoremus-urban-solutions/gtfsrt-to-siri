@@ -61,10 +61,14 @@ Access methods provide convenient lookups without exposing protobuf internals:
 	// Service alerts
 	alerts := wrapper.GetAlerts()
 
-# HTTP Fetching
+# Data Fetching
 
-This package does NOT include HTTP fetching. For CLI usage, use gtfsrt.NewClient().
-For server usage, implement your own fetching logic and pass raw bytes to NewGTFSRTWrapper.
+This package does NOT include HTTP fetching or file I/O. The library is purely for
+parsing and accessing GTFS-RT data. Fetching logic belongs in your application layer.
+
+For CLI usage, see cmd/gtfsrt-to-siri/ which includes a simple HTTP/file fetcher.
+For server usage, implement your own fetching (Kafka, MinIO, etc.) and pass raw bytes
+to NewGTFSRTWrapper.
 
 # Supported Feed Types
 
