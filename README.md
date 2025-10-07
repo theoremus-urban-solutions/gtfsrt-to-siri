@@ -2,11 +2,7 @@
 
 A lightweight library for transforming GTFS-Realtime transit data into SIRI (Standard Interface for Realtime Information) format. The implementation follows Entur's latest public specification.
 
-**Features:**
-- **On-demand conversion** – No caching layer; designed for integration into larger systems
-- **Fast HTTP calls** – 10-second timeouts with 3 retries
-- **Standardized SIRI output** – Includes `ProducerRef` (codespace) in all responses
-- **Modular architecture** – Clean separation: `siri/`, `gtfs/`, `gtfsrt/`, `converter/`, `formatter/`, `tracking/`, `utils/`
+Sister project: [SIRI to GTFS-Realtime](https://github.com/theoremus-urban-solutions/siri-to-gtfsrt)
 
 ## Acknowledgments
 
