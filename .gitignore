@@ -1,7 +1,7 @@
 # build artifacts
 cmd/gtfsrt-to-siri/gtfsrt-to-siri
 bin/
-gtfsrt-to-siri
+/gtfsrt-to-siri
 
 # indexes / outputs
 indexedScheduleData.json
