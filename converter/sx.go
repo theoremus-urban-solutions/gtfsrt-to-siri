@@ -26,11 +26,11 @@ func (c *Converter) BuildSituationExchange() siri.SituationExchange {
 
 		summaries := []siri.LocalizedText{}
 		if causeEN != "" || effectEN != "" {
-			summaryEN := "Cause: " + causeEN + "; Effect: " + effectEN
+			summaryEN := causeEN + ": " + effectEN
 			summaries = append(summaries, siri.LocalizedText{Lang: "en", Text: summaryEN})
 		}
 		if causeBG != "" || effectBG != "" {
-			summaryBG := "Причина: " + causeBG + "; Ефект: " + effectBG
+			summaryBG := causeBG + ": " + effectBG
 			summaries = append(summaries, siri.LocalizedText{Lang: "bg", Text: summaryBG})
 		}
 
