@@ -59,11 +59,15 @@ func TestConverter_SX_AlertStructure(t *testing.T) {
 		t.Error("Alert should have SituationNumber")
 	}
 
-	if alert.Summary == "" && alert.Description == "" {
-		t.Error("Alert should have either Summary or Description")
+	if len(alert.Summaries) == 0 && len(alert.Descriptions) == 0 {
+		t.Error("Alert should have either Summaries or Descriptions")
 	}
 
-	t.Logf("Alert: %s - %s", alert.SituationNumber, alert.Summary)
+	summaryText := ""
+	if len(alert.Summaries) > 0 {
+		summaryText = alert.Summaries[0].Text
+	}
+	t.Logf("Alert: %s - %s", alert.SituationNumber, summaryText)
 }
 
 // Test SX affected entities (routes, stops, trips)
