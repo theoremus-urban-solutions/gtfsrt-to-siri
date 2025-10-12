@@ -1,7 +1,9 @@
 package helpers
 
 import (
+	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/gtfsrt"
@@ -39,4 +41,14 @@ func LoadGTFSRTFromLocal(t *testing.T) *gtfsrt.GTFSRTWrapper {
 	}
 
 	return wrapper
+}
+
+// LoadProtobufFile loads a raw protobuf file from testdata/gtfsrt
+func LoadProtobufFile(filename string) ([]byte, error) {
+	path := filepath.Join(GetTestDataPath(), "gtfsrt", filename)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read %s: %w", filename, err)
+	}
+	return data, nil
 }
