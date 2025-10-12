@@ -190,6 +190,11 @@ func writeMVJXML(b *strings.Builder, mvj siri.MonitoredVehicleJourney) {
 		b.WriteString(strconv.FormatFloat(*mvj.Bearing, 'f', 2, 64))
 		b.WriteString("</Bearing>")
 	}
+	if mvj.Velocity != nil {
+		b.WriteString("<Velocity>")
+		b.WriteString(strconv.Itoa(*mvj.Velocity))
+		b.WriteString("</Velocity>")
+	}
 	// Occupancy (placed right above Delay)
 	if mvj.Occupancy != "" {
 		b.WriteString("<Occupancy>")

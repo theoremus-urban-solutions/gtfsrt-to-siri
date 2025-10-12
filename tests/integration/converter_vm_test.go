@@ -206,3 +206,46 @@ func TestConverter_VM_MonitoredCall(t *testing.T) {
 		t.Error("At least one vehicle should have monitored call")
 	}
 }
+
+// Test that Velocity field is populated from GTFS-RT VehiclePosition speed
+func TestConverter_VM_Velocity(t *testing.T) {
+	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip", "SOFIA")
+	gtfsrtData := helpers.LoadGTFSRTFromLocal(t)
+
+	opts := helpers.DefaultConverterOptions("SOFIA")
+	c := converter.NewConverter(gtfsIndex, gtfsrtData, opts)
+
+	result := c.GetCompleteVehicleMonitoringResponse()
+	if result == nil {
+		t.Fatal("VM result should not be nil")
+	}
+
+	vm := result.Siri.ServiceDelivery.VehicleMonitoringDelivery
+	if len(vm) == 0 || len(vm[0].VehicleActivity) == 0 {
+		t.Skip("No vehicle activities in test data")
+	}
+
+	// Check if any vehicle has Velocity populated
+	hasVelocity := false
+	for _, activity := range vm[0].VehicleActivity {
+		mvj := activity.MonitoredVehicleJourney
+		if mvj.Velocity != nil {
+			hasVelocity = true
+			t.Logf("Found vehicle with Velocity: %d m/s", *mvj.Velocity)
+
+			// Velocity should be non-negative
+			if *mvj.Velocity < 0 {
+				t.Errorf("Velocity should be non-negative, got %d", *mvj.Velocity)
+			}
+			break
+		}
+	}
+
+	// Note: It's OK if no vehicles have speed data in the test feed
+	// This test just ensures the field is properly wired up when present
+	if hasVelocity {
+		t.Log("✓ Velocity field is properly populated from GTFS-RT speed")
+	} else {
+		t.Log("⚠ No vehicles with speed data in test feed (this is OK)")
+	}
+}

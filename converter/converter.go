@@ -52,8 +52,8 @@ func (c *Converter) GetCompleteVehicleMonitoringResponse() *siri.SiriResponse {
 		VehicleActivity:   []siri.VehicleActivityEntry{},
 	}
 
-	// Get all monitored trips and build MVJ for each
-	trips := c.gtfsrt.GetAllMonitoredTrips()
+	// Get trips from VehiclePositions only (VM should only include trips with position data)
+	trips := c.gtfsrt.GetTripsFromVehiclePositions()
 	for _, tripID := range trips {
 		mvj := c.buildMVJ(tripID)
 		tripTimestamp := c.gtfsrt.GetTimestampForTrip(tripID)

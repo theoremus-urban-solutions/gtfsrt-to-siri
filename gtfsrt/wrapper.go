@@ -12,7 +12,9 @@ import (
 // This wrapper is data-source agnostic - it accepts raw protobuf bytes
 // and does NOT handle HTTP fetching or file I/O.
 type GTFSRTWrapper struct {
-	trips           map[string]struct{}
+	trips           map[string]struct{} // All trips (from both TripUpdates and VehiclePositions)
+	tripsFromTU     map[string]struct{} // Trips from TripUpdates only (for ET)
+	tripsFromVP     map[string]struct{} // Trips from VehiclePositions only (for VM)
 	vehicleTS       map[string]int64
 	headerTimestamp int64
 
@@ -28,6 +30,7 @@ type GTFSRTWrapper struct {
 	tripLat        map[string]float64 // trip_id -> lat
 	tripLon        map[string]float64 // trip_id -> lon
 	tripBearing    map[string]float64 // trip_id -> bearing
+	tripSpeed      map[string]float64 // trip_id -> speed (m/s)
 
 	// Occupancy and congestion data
 	tripOccupancy  map[string]int32 // trip_id -> occupancy_status (from TripUpdate)
@@ -52,6 +55,8 @@ type GTFSRTWrapper struct {
 func NewGTFSRTWrapper(tripUpdatesData, vehiclePositionsData, serviceAlertsData []byte) (*GTFSRTWrapper, error) {
 	wrapper := &GTFSRTWrapper{
 		trips:          map[string]struct{}{},
+		tripsFromTU:    map[string]struct{}{},
+		tripsFromVP:    map[string]struct{}{},
 		vehicleTS:      map[string]int64{},
 		schedRelByStop: map[string]map[string]int32{},
 		tripRoute:      map[string]string{},
@@ -64,6 +69,7 @@ func NewGTFSRTWrapper(tripUpdatesData, vehiclePositionsData, serviceAlertsData [
 		tripLat:        map[string]float64{},
 		tripLon:        map[string]float64{},
 		tripBearing:    map[string]float64{},
+		tripSpeed:      map[string]float64{},
 		tripOccupancy:  map[string]int32{},
 		tripCongestion: map[string]int32{},
 		alerts:         []RTAlert{},
@@ -112,6 +118,24 @@ func NewGTFSRTWrapper(tripUpdatesData, vehiclePositionsData, serviceAlertsData [
 func (w *GTFSRTWrapper) GetAllMonitoredTrips() []string {
 	ids := make([]string, 0, len(w.trips))
 	for id := range w.trips {
+		ids = append(ids, id)
+	}
+	return ids
+}
+
+// GetTripsFromTripUpdates returns trips that have TripUpdate data (for Estimated Timetable)
+func (w *GTFSRTWrapper) GetTripsFromTripUpdates() []string {
+	ids := make([]string, 0, len(w.tripsFromTU))
+	for id := range w.tripsFromTU {
+		ids = append(ids, id)
+	}
+	return ids
+}
+
+// GetTripsFromVehiclePositions returns trips that have VehiclePosition data (for Vehicle Monitoring)
+func (w *GTFSRTWrapper) GetTripsFromVehiclePositions() []string {
+	ids := make([]string, 0, len(w.tripsFromVP))
+	for id := range w.tripsFromVP {
 		ids = append(ids, id)
 	}
 	return ids
@@ -194,6 +218,12 @@ func (w *GTFSRTWrapper) GetVehicleBearingForTrip(tripID string) (float64, bool) 
 	return v, ok
 }
 
+// GetVehicleSpeedForTrip returns the speed in m/s from VehiclePosition
+func (w *GTFSRTWrapper) GetVehicleSpeedForTrip(tripID string) (float64, bool) {
+	v, ok := w.tripSpeed[tripID]
+	return v, ok
+}
+
 // GetScheduleRelationshipForStop returns the schedule_relationship for a stop (0=SCHEDULED, 1=SKIPPED, 2=NO_DATA)
 func (w *GTFSRTWrapper) GetScheduleRelationshipForStop(tripID, stopID string) int32 {
 	if m, ok := w.schedRelByStop[tripID]; ok {
@@ -254,6 +284,7 @@ func (w *GTFSRTWrapper) parseTripUpdatesFeed(fm *gtfsrtpb.FeedMessage) {
 		if e.TripUpdate != nil && e.TripUpdate.Trip != nil && e.TripUpdate.Trip.TripId != nil {
 			tripID := *e.TripUpdate.Trip.TripId
 			w.trips[tripID] = struct{}{}
+			w.tripsFromTU[tripID] = struct{}{}
 			if e.TripUpdate.Trip.RouteId != nil {
 				w.tripRoute[tripID] = *e.TripUpdate.Trip.RouteId
 			}
@@ -309,6 +340,7 @@ func (w *GTFSRTWrapper) parseVehiclePositionsFeed(fm *gtfsrtpb.FeedMessage) {
 			}
 			if tripID != "" {
 				w.trips[tripID] = struct{}{}
+				w.tripsFromVP[tripID] = struct{}{}
 			}
 			if e.Vehicle.Vehicle != nil && e.Vehicle.Vehicle.Id != nil && tripID != "" {
 				if _, exists := w.tripVehicleRef[tripID]; !exists {
@@ -324,6 +356,9 @@ func (w *GTFSRTWrapper) parseVehiclePositionsFeed(fm *gtfsrtpb.FeedMessage) {
 				}
 				if e.Vehicle.Position.Bearing != nil {
 					w.tripBearing[tripID] = float64(*e.Vehicle.Position.Bearing)
+				}
+				if e.Vehicle.Position.Speed != nil {
+					w.tripSpeed[tripID] = float64(*e.Vehicle.Position.Speed)
 				}
 			}
 			if e.Vehicle.CongestionLevel != nil && tripID != "" {

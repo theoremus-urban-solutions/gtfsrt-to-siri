@@ -109,6 +109,14 @@ func (c *Converter) buildMVJ(tripID string) siri.MonitoredVehicleJourney {
 	// Map congestion level from GTFS-RT VehiclePosition
 	inCongestion := c.mapCongestionLevel(tripID)
 
+	// Get vehicle speed from GTFS-RT VehiclePosition (in m/s)
+	var velocity *int
+	if speed, ok := c.gtfsrt.GetVehicleSpeedForTrip(tripID); ok {
+		// GTFS-RT speed is in m/s, SIRI Velocity is also in m/s (rounded to int)
+		v := int(math.Round(speed))
+		velocity = &v
+	}
+
 	// Build MonitoredCall (current or next stop) instead of OnwardCalls for VM
 	monitoredCall := c.buildMonitoredCall(tripID)
 
@@ -142,6 +150,7 @@ func (c *Converter) buildMVJ(tripID string) siri.MonitoredVehicleJourney {
 		DataSource:               agency, // SIRI-VM spec: required codespace
 		VehicleLocation:          siri.VehicleLocation{Latitude: latPtr, Longitude: lonPtr},
 		Bearing:                  bearing,
+		Velocity:                 velocity, // Speed in m/s from VehiclePosition
 		Occupancy:                occupancy,
 		Delay:                    delay,  // SIRI-VM spec: required
 		VehicleRef:               vehRef, // SIRI-VM spec: {codespace}:VehicleRef:{vehicle_id}
@@ -227,7 +236,7 @@ func (c *Converter) calculateDelay(tripID string) string {
 	return utils.FormatDelayAsISO8601Duration(delaySeconds)
 }
 
-// mapOccupancyStatus maps GTFS-RT TripUpdate occupancy_status to SIRI Occupancy values
+// mapOccupancyStatus maps GTFS-RT VehiclePosition occupancy_status to SIRI Occupancy values
 func (c *Converter) mapOccupancyStatus(tripID string) string {
 	occupancyStatus := c.gtfsrt.GetOccupancyStatusForTrip(tripID)
 

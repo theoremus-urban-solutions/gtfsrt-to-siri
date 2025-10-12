@@ -18,8 +18,8 @@ func (c *Converter) BuildEstimatedTimetable() siri.EstimatedTimetable {
 		agencyID = "UNKNOWN"
 	}
 
-	// Get all active trips from GTFS-RT
-	allTrips := c.gtfsrt.GetAllMonitoredTrips()
+	// Get trips from TripUpdates only (ET should only include trips with trip update data)
+	allTrips := c.gtfsrt.GetTripsFromTripUpdates()
 	journeys := make([]siri.EstimatedVehicleJourney, 0, len(allTrips))
 
 	for _, tripID := range allTrips {
@@ -80,6 +80,7 @@ func (c *Converter) buildEstimatedVehicleJourney(tripID string, now int64, agenc
 	}
 
 	if len(stopSequence) == 0 {
+		// Trip exists in GTFS-RT but not in GTFS static - skip it
 		return nil
 	}
 

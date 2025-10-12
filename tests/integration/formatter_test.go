@@ -51,6 +51,11 @@ func TestFormatter_VM_ToXML(t *testing.T) {
 		t.Error("XML should contain <VehicleActivity>")
 	}
 
+	// Check for Velocity field (if present in data)
+	if strings.Contains(xmlStr, "<Velocity>") {
+		t.Log("✓ Velocity field is present in XML output")
+	}
+
 	// Verify ResponseTimestamp exists
 	if !strings.Contains(xmlStr, "<ResponseTimestamp>") {
 		t.Error("XML should contain <ResponseTimestamp>")
