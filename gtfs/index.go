@@ -50,6 +50,11 @@ func (g *GTFSIndex) GetRouteShortName(routeID string) string { return g.routeSho
 
 func (g *GTFSIndex) GetRouteType(routeID string) int { return g.routeTypes[routeID] }
 
+func (g *GTFSIndex) GetRouteTypeWithExists(routeID string) (int, bool) {
+	routeType, exists := g.routeTypes[routeID]
+	return routeType, exists
+}
+
 func (g *GTFSIndex) GetAgencyName() string { return g.agencyName }
 
 func (g *GTFSIndex) GetStopName(stopID string) string { return g.stopNames[stopID] }

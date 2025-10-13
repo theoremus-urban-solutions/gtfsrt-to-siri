@@ -95,7 +95,7 @@ func (c *Converter) buildEstimatedVehicleJourney(tripID string, now int64, agenc
 
 	// Get VehicleMode from route_type
 	vehicleMode := ""
-	if routeType := c.gtfs.GetRouteType(routeID); routeType > 0 {
+	if routeType, exists := c.gtfs.GetRouteTypeWithExists(routeID); exists {
 		vehicleMode = mapGTFSRouteTypeToSIRIVehicleMode(routeType)
 	} else if routeID != "UNKNOWN" {
 		c.warnings.Add(WarningNoRouteType, tripID+":"+routeID)
