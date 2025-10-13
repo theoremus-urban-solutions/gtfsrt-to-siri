@@ -1,10 +1,12 @@
 package integration
 
 import (
+	"os"
 	"testing"
 
 	gtfsrtpb "github.com/MobilityData/gtfs-realtime-bindings/golang/gtfs"
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/converter"
+	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/gtfsrt"
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/siri"
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/tests/helpers"
 	"google.golang.org/protobuf/proto"
@@ -15,10 +17,9 @@ import (
 func TestVM_EntryCount(t *testing.T) {
 	// Load test data
 	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip", "SOFIA")
-	gtfsrtData := helpers.LoadGTFSRTFromLocal(t)
 
-	// Count input VehiclePositions
-	vpData, err := helpers.LoadProtobufFile("vehicle-positions.pb")
+	// Count input VehiclePositions from golden file
+	vpData, err := os.ReadFile("../../pbf-input/vehicle-positions-golden.pbf")
 	if err != nil {
 		t.Fatalf("Failed to load vehicle positions: %v", err)
 	}
@@ -27,6 +28,20 @@ func TestVM_EntryCount(t *testing.T) {
 		t.Fatalf("Failed to parse vehicle positions: %v", err)
 	}
 	inputCount := len(vpFeed.Entity)
+
+	// Load GTFS-RT data from golden files
+	tuData, err := os.ReadFile("../../pbf-input/trip-updates-golden.pbf")
+	if err != nil {
+		t.Fatalf("Failed to load trip updates: %v", err)
+	}
+	saData, err := os.ReadFile("../../pbf-input/alerts-golden.pbf")
+	if err != nil {
+		t.Fatalf("Failed to load alerts: %v", err)
+	}
+	gtfsrtData, err := gtfsrt.NewGTFSRTWrapper(tuData, vpData, saData)
+	if err != nil {
+		t.Fatalf("Failed to create GTFS-RT wrapper: %v", err)
+	}
 
 	// Generate VM response
 	opts := helpers.DefaultConverterOptions("SOFIA")
@@ -58,10 +73,9 @@ func TestVM_EntryCount(t *testing.T) {
 func TestET_EntryCount(t *testing.T) {
 	// Load test data
 	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip", "SOFIA")
-	gtfsrtData := helpers.LoadGTFSRTFromLocal(t)
 
-	// Count input TripUpdates
-	tuData, err := helpers.LoadProtobufFile("trip-updates.pb")
+	// Count input TripUpdates from golden file
+	tuData, err := os.ReadFile("../../pbf-input/trip-updates-golden.pbf")
 	if err != nil {
 		t.Fatalf("Failed to load trip updates: %v", err)
 	}
@@ -70,6 +84,20 @@ func TestET_EntryCount(t *testing.T) {
 		t.Fatalf("Failed to parse trip updates: %v", err)
 	}
 	inputCount := len(tuFeed.Entity)
+
+	// Load GTFS-RT data from golden files
+	vpData, err := os.ReadFile("../../pbf-input/vehicle-positions-golden.pbf")
+	if err != nil {
+		t.Fatalf("Failed to load vehicle positions: %v", err)
+	}
+	saData, err := os.ReadFile("../../pbf-input/alerts-golden.pbf")
+	if err != nil {
+		t.Fatalf("Failed to load alerts: %v", err)
+	}
+	gtfsrtData, err := gtfsrt.NewGTFSRTWrapper(tuData, vpData, saData)
+	if err != nil {
+		t.Fatalf("Failed to create GTFS-RT wrapper: %v", err)
+	}
 
 	// Generate ET response
 	opts := helpers.DefaultConverterOptions("SOFIA")
@@ -109,10 +137,9 @@ func TestET_EntryCount(t *testing.T) {
 func TestSX_EntryCount(t *testing.T) {
 	// Load test data
 	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip", "SOFIA")
-	gtfsrtData := helpers.LoadGTFSRTFromLocal(t)
 
-	// Count input Alerts
-	saData, err := helpers.LoadProtobufFile("service-alerts.pb")
+	// Count input Alerts from golden file
+	saData, err := os.ReadFile("../../pbf-input/alerts-golden.pbf")
 	if err != nil {
 		t.Fatalf("Failed to load service alerts: %v", err)
 	}
@@ -121,6 +148,20 @@ func TestSX_EntryCount(t *testing.T) {
 		t.Fatalf("Failed to parse service alerts: %v", err)
 	}
 	inputCount := len(saFeed.Entity)
+
+	// Load GTFS-RT data from golden files
+	tuData, err := os.ReadFile("../../pbf-input/trip-updates-golden.pbf")
+	if err != nil {
+		t.Fatalf("Failed to load trip updates: %v", err)
+	}
+	vpData, err := os.ReadFile("../../pbf-input/vehicle-positions-golden.pbf")
+	if err != nil {
+		t.Fatalf("Failed to load vehicle positions: %v", err)
+	}
+	gtfsrtData, err := gtfsrt.NewGTFSRTWrapper(tuData, vpData, saData)
+	if err != nil {
+		t.Fatalf("Failed to create GTFS-RT wrapper: %v", err)
+	}
 
 	// Generate SX response
 	opts := helpers.DefaultConverterOptions("SOFIA")
