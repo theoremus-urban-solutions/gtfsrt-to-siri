@@ -22,12 +22,12 @@ func BuildServiceDelivery(timestamp int64, codespace string) siri.VehicleAndSitu
 }
 
 // WrapEstimatedTimetableResponse wraps an ET delivery in a complete SIRI response
-func WrapEstimatedTimetableResponse(et siri.EstimatedTimetable, codespace string) *siri.SiriResponse {
+func WrapEstimatedTimetableResponse(et siri.EstimatedTimetableDelivery, codespace string) *siri.SiriResponse {
 	// Extract timestamp from ET's ResponseTimestamp
 	timestamp := extractTimestampFromISO8601(et.ResponseTimestamp)
 
 	sd := BuildServiceDelivery(timestamp, codespace)
-	sd.EstimatedTimetableDelivery = []siri.EstimatedTimetable{et}
+	sd.EstimatedTimetableDelivery = []siri.EstimatedTimetableDelivery{et}
 
 	return &siri.SiriResponse{
 		Siri: siri.SiriServiceDelivery{
@@ -49,12 +49,13 @@ func WrapSituationExchangeResponse(sx siri.SituationExchange, timestamp int64, c
 }
 
 // FilterEstimatedTimetable applies filters to ET journeys
-func FilterEstimatedTimetable(et siri.EstimatedTimetable, monitoringRef, lineRef, directionRef string) siri.EstimatedTimetable {
+func FilterEstimatedTimetable(et siri.EstimatedTimetableDelivery, monitoringRef, lineRef, directionRef string) siri.EstimatedTimetableDelivery {
 	monitoringRef = strings.ToLower(strings.TrimSpace(monitoringRef))
 	lineRef = strings.ToLower(strings.TrimSpace(lineRef))
 	directionRef = strings.ToLower(strings.TrimSpace(directionRef))
 
-	filtered := siri.EstimatedTimetable{
+	filtered := siri.EstimatedTimetableDelivery{
+		Version:                      et.Version,
 		ResponseTimestamp:            et.ResponseTimestamp,
 		EstimatedJourneyVersionFrame: []siri.EstimatedJourneyVersionFrame{},
 	}
