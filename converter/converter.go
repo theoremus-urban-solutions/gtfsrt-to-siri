@@ -47,9 +47,9 @@ func (c *Converter) GetCompleteVehicleMonitoringResponse() *siri.SiriResponse {
 	codespace := c.opts.AgencyID
 
 	vm := siri.VehicleMonitoring{
+		Version:           "2.0",
 		ResponseTimestamp: utils.Iso8601FromUnixSeconds(timestamp),
-		ValidUntil:        utils.ValidUntilFrom(timestamp, int(c.opts.ReadIntervalMS)),
-		VehicleActivity:   []siri.VehicleActivityEntry{},
+		VehicleActivity:   []siri.VehicleActivity{},
 	}
 
 	// Get trips from VehiclePositions only (VM should only include trips with position data)
@@ -57,10 +57,11 @@ func (c *Converter) GetCompleteVehicleMonitoringResponse() *siri.SiriResponse {
 	for _, tripID := range trips {
 		mvj := c.buildMVJ(tripID)
 		tripTimestamp := c.gtfsrt.GetTimestampForTrip(tripID)
-		entry := siri.VehicleActivityEntry{
+		validUntil := utils.ValidUntilFrom(tripTimestamp, int(c.opts.ReadIntervalMS))
+		entry := siri.VehicleActivity{
 			RecordedAtTime:          utils.Iso8601FromUnixSeconds(tripTimestamp),
-			ValidUntilTime:          utils.ValidUntilFrom(tripTimestamp, int(c.opts.ReadIntervalMS)),
-			MonitoredVehicleJourney: mvj,
+			ValidUntilTime:          validUntil,
+			MonitoredVehicleJourney: &mvj,
 		}
 		vm.VehicleActivity = append(vm.VehicleActivity, entry)
 	}

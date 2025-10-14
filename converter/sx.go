@@ -24,22 +24,22 @@ func (c *Converter) BuildSituationExchange() siri.SituationExchange {
 		causeEN, causeBG := mapGTFSRTCauseToSummaryCause(a.Cause)
 		effectEN, effectBG := mapGTFSRTEffectToSIRISummaryEffect(a.Effect)
 
-		summaries := []siri.LocalizedText{}
+		summaries := []siri.NaturalLanguageString{}
 		if causeEN != "" || effectEN != "" {
 			summaryEN := causeEN + ": " + effectEN
-			summaries = append(summaries, siri.LocalizedText{Lang: "en", Text: summaryEN})
+			summaries = append(summaries, siri.NaturalLanguageString{Lang: "en", Text: summaryEN})
 		}
 		if causeBG != "" || effectBG != "" {
 			summaryBG := causeBG + ": " + effectBG
-			summaries = append(summaries, siri.LocalizedText{Lang: "bg", Text: summaryBG})
+			summaries = append(summaries, siri.NaturalLanguageString{Lang: "bg", Text: summaryBG})
 		}
 
 		// Build localized descriptions
-		descriptions := []siri.LocalizedText{}
+		descriptions := []siri.NaturalLanguageString{}
 		if len(a.DescriptionByLang) > 0 {
 			for lang, desc := range a.DescriptionByLang {
 				if desc != "" {
-					descriptions = append(descriptions, siri.LocalizedText{Lang: lang, Text: desc})
+					descriptions = append(descriptions, siri.NaturalLanguageString{Lang: lang, Text: desc})
 				}
 			}
 		} else if a.Description != "" {
@@ -48,7 +48,7 @@ func (c *Converter) BuildSituationExchange() siri.SituationExchange {
 			if effectPrefix != "" {
 				description = effectPrefix + ": " + a.Description
 			}
-			descriptions = append(descriptions, siri.LocalizedText{Lang: "en", Text: description})
+			descriptions = append(descriptions, siri.NaturalLanguageString{Lang: "en", Text: description})
 		}
 
 		// Build InfoLinks from URLs
@@ -56,40 +56,56 @@ func (c *Converter) BuildSituationExchange() siri.SituationExchange {
 		if len(a.URLByLang) > 0 {
 			for lang, url := range a.URLByLang {
 				if url != "" {
-					infoLinks = append(infoLinks, siri.InfoLink{Lang: lang, URL: url})
+					infoLinks = append(infoLinks, siri.InfoLink{
+						Uri:   url,
+						Label: []siri.NaturalLanguageString{{Lang: lang, Text: lang}},
+					})
 				}
 			}
 		}
 
+		// Build ValidityPeriod
+		validityPeriods := []siri.ValidityPeriod{}
+		if a.Start > 0 || a.End > 0 {
+			vp := siri.ValidityPeriod{}
+			if a.Start > 0 {
+				vp.StartTime = utils.Iso8601FromUnixSeconds(a.Start)
+			}
+			if a.End > 0 {
+				vp.EndTime = utils.Iso8601FromUnixSeconds(a.End)
+			}
+			validityPeriods = append(validityPeriods, vp)
+		}
+
+		// Build Source
+		source := &siri.SituationSource{
+			SourceType: "directReport",
+		}
+
+		// Determine Progress based on validity period
+		progress := "open"
+		if a.End > 0 && a.End < now {
+			progress = "closed"
+		}
+
 		el := siri.PtSituationElement{
+			CreationTime:    utils.Iso8601FromUnixSeconds(now),
 			ParticipantRef:  codespace,
 			SituationNumber: situationNumber,
-			SourceType:      "directReport",
+			Source:          source,
+			Progress:        progress,
+			ValidityPeriod:  validityPeriods,
 			Severity:        severity,
 			ReportType:      mapGTFSRTCauseToReportType(a.Cause),
-			Summaries:       summaries,
-			Descriptions:    descriptions,
+			Summary:         summaries,
+			Description:     descriptions,
 			InfoLinks:       infoLinks,
 		}
-		if a.Start > 0 {
-			el.PublicationWindow.StartTime = utils.Iso8601FromUnixSeconds(a.Start)
-		}
-		if a.End > 0 {
-			el.PublicationWindow.EndTime = utils.Iso8601FromUnixSeconds(a.End)
-		}
-		// Set Progress based on validity period
-		if a.End > 0 && a.End < now {
-			el.Progress = "closed"
-		} else {
-			el.Progress = "open"
-		}
 		// Build Affects structure based on GTFS-RT informed_entity
-		// According to affects.md mapping:
-		// - Route-only alerts -> Networks > siri.AffectedLine
-		// - Trip alerts -> VehicleJourneys
-		// - Stop-only alerts -> StopPoints at Affects level
+		affects := &siri.Affects{}
 
 		// Build VehicleJourneys for trip-level alerts
+		var vehicleJourneys []siri.AffectedVehicleJourney
 		seenTrips := map[string]bool{}
 		for _, tid := range a.TripIDs {
 			if seenTrips[tid] {
@@ -103,35 +119,56 @@ func (c *Converter) BuildSituationExchange() siri.SituationExchange {
 			if rid := c.gtfsrt.GetRouteIDForTrip(tid); rid != "" {
 				vj.LineRef = codespace + ":Line:" + rid
 			}
-			if dir := c.gtfsrt.GetRouteDirectionForTrip(tid); dir != "" {
-				vj.DirectionRef = dir
+			vehicleJourneys = append(vehicleJourneys, vj)
+		}
+		if len(vehicleJourneys) > 0 {
+			affects.VehicleJourneys = &siri.AffectedVehicleJourneys{
+				AffectedVehicleJourney: vehicleJourneys,
 			}
-			el.Affects.VehicleJourneys = append(el.Affects.VehicleJourneys, vj)
 		}
 
-		// Build Networks > siri.AffectedLine for route-level alerts
+		// Build Networks > AffectedLine for route-level alerts
 		if len(a.RouteIDs) > 0 {
-			network := siri.AffectedNetwork{
-				NetworkRef: codespace + ":Network:" + codespace,
-			}
+			var affectedLines []siri.AffectedLine
 			for _, rid := range a.RouteIDs {
 				affectedLine := siri.AffectedLine{
 					LineRef: codespace + ":Line:" + rid,
 				}
-				network.AffectedLines = append(network.AffectedLines, affectedLine)
+				affectedLines = append(affectedLines, affectedLine)
 			}
-			el.Affects.Networks = append(el.Affects.Networks, network)
+			network := siri.AffectedNetwork{
+				NetworkRef: codespace + ":Network:" + codespace,
+				AffectedLines: &siri.AffectedLines{
+					AffectedLine: affectedLines,
+				},
+			}
+			affects.Networks = &siri.AffectedNetworks{
+				AffectedNetwork: []siri.AffectedNetwork{network},
+			}
 		}
 
-		// Build StopPoints for stop-only alerts (at Affects level)
+		// Build StopPoints for stop-only alerts
+		var stopPoints []siri.AffectedStopPoint
 		for _, sid := range a.StopIDs {
-			el.Affects.StopPoints = append(el.Affects.StopPoints, siri.AffectedStopPoint{
+			stopPoints = append(stopPoints, siri.AffectedStopPoint{
 				StopPointRef: applyFieldMutators(sid, c.opts.FieldMutators.StopPointRef),
 			})
 		}
-		// Add siri.Consequences derived from GTFS-RT Effect
+		if len(stopPoints) > 0 {
+			affects.StopPoints = &siri.AffectedStopPoints{
+				AffectedStopPoint: stopPoints,
+			}
+		}
+
+		if affects.Networks != nil || affects.StopPoints != nil || affects.VehicleJourneys != nil {
+			el.Affects = affects
+		}
+
+		// Add Consequences derived from GTFS-RT Effect
 		if cond := effectToCondition(a.Effect); cond != "" {
-			el.Consequences = []siri.Consequence{{Condition: cond}}
+			el.Consequences = &siri.Consequences{
+				Consequence: []siri.Consequence{{Condition: cond}},
+			}
 		}
 		elements = append(elements, el)
 	}

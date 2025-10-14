@@ -6,6 +6,7 @@ import (
 
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/siri"
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/utils"
+	siritemp "github.com/theoremus-urban-solutions/transit-types/siri"
 )
 
 // BuildServiceDelivery creates a standardized ServiceDelivery wrapper
@@ -22,12 +23,12 @@ func BuildServiceDelivery(timestamp int64, codespace string) siri.VehicleAndSitu
 }
 
 // WrapEstimatedTimetableResponse wraps an ET delivery in a complete SIRI response
-func WrapEstimatedTimetableResponse(et siri.EstimatedTimetableDelivery, codespace string) *siri.SiriResponse {
+func WrapEstimatedTimetableResponse(et siritemp.EstimatedTimetableDelivery, codespace string) *siri.SiriResponse {
 	// Extract timestamp from ET's ResponseTimestamp
 	timestamp := extractTimestampFromISO8601(et.ResponseTimestamp)
 
 	sd := BuildServiceDelivery(timestamp, codespace)
-	sd.EstimatedTimetableDelivery = []siri.EstimatedTimetableDelivery{et}
+	sd.EstimatedTimetableDelivery = []siritemp.EstimatedTimetableDelivery{et}
 
 	return &siri.SiriResponse{
 		Siri: siri.SiriServiceDelivery{
@@ -49,19 +50,19 @@ func WrapSituationExchangeResponse(sx siri.SituationExchange, timestamp int64, c
 }
 
 // FilterEstimatedTimetable applies filters to ET journeys
-func FilterEstimatedTimetable(et siri.EstimatedTimetableDelivery, monitoringRef, lineRef, directionRef string) siri.EstimatedTimetableDelivery {
+func FilterEstimatedTimetable(et siritemp.EstimatedTimetableDelivery, monitoringRef, lineRef, directionRef string) siritemp.EstimatedTimetableDelivery {
 	monitoringRef = strings.ToLower(strings.TrimSpace(monitoringRef))
 	lineRef = strings.ToLower(strings.TrimSpace(lineRef))
 	directionRef = strings.ToLower(strings.TrimSpace(directionRef))
 
-	filtered := siri.EstimatedTimetableDelivery{
+	filtered := siritemp.EstimatedTimetableDelivery{
 		Version:                      et.Version,
 		ResponseTimestamp:            et.ResponseTimestamp,
-		EstimatedJourneyVersionFrame: []siri.EstimatedJourneyVersionFrame{},
+		EstimatedJourneyVersionFrame: []siritemp.EstimatedJourneyVersionFrame{},
 	}
 
 	for _, frame := range et.EstimatedJourneyVersionFrame {
-		filteredJourneys := []siri.EstimatedVehicleJourney{}
+		filteredJourneys := []siritemp.EstimatedVehicleJourney{}
 
 		for _, journey := range frame.EstimatedVehicleJourney {
 			// Filter by LineRef
@@ -100,7 +101,7 @@ func FilterEstimatedTimetable(et siri.EstimatedTimetableDelivery, monitoringRef,
 		}
 
 		if len(filteredJourneys) > 0 {
-			filteredFrame := siri.EstimatedJourneyVersionFrame{
+			filteredFrame := siritemp.EstimatedJourneyVersionFrame{
 				RecordedAtTime:          frame.RecordedAtTime,
 				EstimatedVehicleJourney: filteredJourneys,
 			}

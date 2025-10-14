@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/siri"
+	siritemp "github.com/theoremus-urban-solutions/transit-types/siri"
 )
 
 // BuildXML serializes a SIRI response to XML
@@ -42,16 +43,13 @@ func (rb *responseBuilder) BuildXML(res *siri.SiriResponse) []byte {
 }
 
 func writeVehicleMonitoringXML(b *strings.Builder, vm siri.VehicleMonitoring) {
-	b.WriteString("<VehicleMonitoringDelivery>")
+	b.WriteString(`<VehicleMonitoringDelivery version="`)
+	b.WriteString(xmlEscape(vm.Version))
+	b.WriteString(`">`)
 	if vm.ResponseTimestamp != "" {
 		b.WriteString("<ResponseTimestamp>")
 		b.WriteString(xmlEscape(vm.ResponseTimestamp))
 		b.WriteString("</ResponseTimestamp>")
-	}
-	if vm.ValidUntil != "" {
-		b.WriteString("<ValidUntil>")
-		b.WriteString(xmlEscape(vm.ValidUntil))
-		b.WriteString("</ValidUntil>")
 	}
 	for _, va := range vm.VehicleActivity {
 		b.WriteString("<VehicleActivity>")
@@ -65,7 +63,9 @@ func writeVehicleMonitoringXML(b *strings.Builder, vm siri.VehicleMonitoring) {
 			b.WriteString(xmlEscape(va.ValidUntilTime))
 			b.WriteString("</ValidUntilTime>")
 		}
-		writeMVJXML(b, va.MonitoredVehicleJourney)
+		if va.MonitoredVehicleJourney != nil {
+			writeMVJXML(b, *va.MonitoredVehicleJourney)
+		}
 		b.WriteString("</VehicleActivity>")
 	}
 	b.WriteString("</VehicleMonitoringDelivery>")
@@ -78,28 +78,21 @@ func writeMVJXML(b *strings.Builder, mvj siri.MonitoredVehicleJourney) {
 		b.WriteString(xmlEscape(mvj.LineRef))
 		b.WriteString("</LineRef>")
 	}
-	switch v := mvj.DirectionRef.(type) {
-	case string:
-		if v != "" {
-			b.WriteString("<DirectionRef>")
-			b.WriteString(xmlEscape(v))
-			b.WriteString("</DirectionRef>")
-		}
-	case float64:
+	if mvj.DirectionRef != "" {
 		b.WriteString("<DirectionRef>")
-		b.WriteString(strconv.FormatFloat(v, 'f', -1, 64))
+		b.WriteString(xmlEscape(mvj.DirectionRef))
 		b.WriteString("</DirectionRef>")
 	}
-	if fr, ok := mvj.FramedVehicleJourneyRef.(siri.FramedVehicleJourneyRef); ok {
+	if mvj.FramedVehicleJourneyRef != nil {
 		b.WriteString("<FramedVehicleJourneyRef>")
-		if fr.DataFrameRef != "" {
+		if mvj.FramedVehicleJourneyRef.DataFrameRef != "" {
 			b.WriteString("<DataFrameRef>")
-			b.WriteString(xmlEscape(fr.DataFrameRef))
+			b.WriteString(xmlEscape(mvj.FramedVehicleJourneyRef.DataFrameRef))
 			b.WriteString("</DataFrameRef>")
 		}
-		if fr.DatedVehicleJourneyRef != "" {
+		if mvj.FramedVehicleJourneyRef.DatedVehicleJourneyRef != "" {
 			b.WriteString("<DatedVehicleJourneyRef>")
-			b.WriteString(xmlEscape(fr.DatedVehicleJourneyRef))
+			b.WriteString(xmlEscape(mvj.FramedVehicleJourneyRef.DatedVehicleJourneyRef))
 			b.WriteString("</DatedVehicleJourneyRef>")
 		}
 		b.WriteString("</FramedVehicleJourneyRef>")
@@ -109,12 +102,6 @@ func writeMVJXML(b *strings.Builder, mvj siri.MonitoredVehicleJourney) {
 		b.WriteString("<VehicleMode>")
 		b.WriteString(xmlEscape(mvj.VehicleMode))
 		b.WriteString("</VehicleMode>")
-	}
-	// JourneyPatternRef - REMOVED for VM spec compliance (not in Entur spec)
-	if mvj.PublishedLineName != "" {
-		b.WriteString("<PublishedLineName>")
-		b.WriteString(xmlEscape(mvj.PublishedLineName))
-		b.WriteString("</PublishedLineName>")
 	}
 	if mvj.OperatorRef != "" {
 		b.WriteString("<OperatorRef>")
@@ -141,27 +128,15 @@ func writeMVJXML(b *strings.Builder, mvj siri.MonitoredVehicleJourney) {
 		b.WriteString(xmlEscape(mvj.DestinationName))
 		b.WriteString("</DestinationName>")
 	}
-	if mvj.OriginAimedDepartureTime != "" {
-		b.WriteString("<OriginAimedDepartureTime>")
-		b.WriteString(xmlEscape(mvj.OriginAimedDepartureTime))
-		b.WriteString("</OriginAimedDepartureTime>")
-	}
-	b.WriteString("<Monitored>")
-	if mvj.Monitored {
-		b.WriteString("true")
-	} else {
-		b.WriteString("false")
-	}
-	b.WriteString("</Monitored>")
-	// InCongestion (placed right above DataSource)
-	if mvj.InCongestion != nil {
-		b.WriteString("<InCongestion>")
-		if *mvj.InCongestion {
+	// Monitored field
+	if mvj.Monitored != nil {
+		b.WriteString("<Monitored>")
+		if *mvj.Monitored {
 			b.WriteString("true")
 		} else {
 			b.WriteString("false")
 		}
-		b.WriteString("</InCongestion>")
+		b.WriteString("</Monitored>")
 	}
 	// DataSource (SIRI-VM spec: required)
 	if mvj.DataSource != "" {
@@ -169,21 +144,16 @@ func writeMVJXML(b *strings.Builder, mvj siri.MonitoredVehicleJourney) {
 		b.WriteString(xmlEscape(mvj.DataSource))
 		b.WriteString("</DataSource>")
 	}
-	if loc, ok := mvj.VehicleLocation.(siri.VehicleLocation); ok {
-		if loc.Latitude != nil || loc.Longitude != nil {
-			b.WriteString("<VehicleLocation>")
-			if loc.Latitude != nil {
-				b.WriteString("<Latitude>")
-				b.WriteString(strconv.FormatFloat(*loc.Latitude, 'f', 6, 64))
-				b.WriteString("</Latitude>")
-			}
-			if loc.Longitude != nil {
-				b.WriteString("<Longitude>")
-				b.WriteString(strconv.FormatFloat(*loc.Longitude, 'f', 6, 64))
-				b.WriteString("</Longitude>")
-			}
-			b.WriteString("</VehicleLocation>")
-		}
+	// VehicleLocation
+	if mvj.VehicleLocation != nil {
+		b.WriteString("<VehicleLocation>")
+		b.WriteString("<Longitude>")
+		b.WriteString(strconv.FormatFloat(mvj.VehicleLocation.Longitude, 'f', 6, 64))
+		b.WriteString("</Longitude>")
+		b.WriteString("<Latitude>")
+		b.WriteString(strconv.FormatFloat(mvj.VehicleLocation.Latitude, 'f', 6, 64))
+		b.WriteString("</Latitude>")
+		b.WriteString("</VehicleLocation>")
 	}
 	if mvj.Bearing != nil {
 		b.WriteString("<Bearing>")
@@ -195,7 +165,7 @@ func writeMVJXML(b *strings.Builder, mvj siri.MonitoredVehicleJourney) {
 		b.WriteString(strconv.Itoa(*mvj.Velocity))
 		b.WriteString("</Velocity>")
 	}
-	// Occupancy (placed right above Delay)
+	// Occupancy
 	if mvj.Occupancy != "" {
 		b.WriteString("<Occupancy>")
 		b.WriteString(xmlEscape(mvj.Occupancy))
@@ -206,6 +176,28 @@ func writeMVJXML(b *strings.Builder, mvj siri.MonitoredVehicleJourney) {
 		b.WriteString("<Delay>")
 		b.WriteString(xmlEscape(mvj.Delay))
 		b.WriteString("</Delay>")
+	}
+	// InCongestion
+	if mvj.InCongestion != nil {
+		b.WriteString("<InCongestion>")
+		if *mvj.InCongestion {
+			b.WriteString("true")
+		} else {
+			b.WriteString("false")
+		}
+		b.WriteString("</InCongestion>")
+	}
+	// VehicleStatus
+	if mvj.VehicleStatus != "" {
+		b.WriteString("<VehicleStatus>")
+		b.WriteString(xmlEscape(mvj.VehicleStatus))
+		b.WriteString("</VehicleStatus>")
+	}
+	// VehicleJourneyRef
+	if mvj.VehicleJourneyRef != "" {
+		b.WriteString("<VehicleJourneyRef>")
+		b.WriteString(xmlEscape(mvj.VehicleJourneyRef))
+		b.WriteString("</VehicleJourneyRef>")
 	}
 	if mvj.VehicleRef != "" {
 		b.WriteString("<VehicleRef>")
@@ -252,7 +244,7 @@ func writeMVJXML(b *strings.Builder, mvj siri.MonitoredVehicleJourney) {
 	b.WriteString("</MonitoredVehicleJourney>")
 }
 
-func writeEstimatedTimetableXML(b *strings.Builder, et siri.EstimatedTimetableDelivery) {
+func writeEstimatedTimetableXML(b *strings.Builder, et siritemp.EstimatedTimetableDelivery) {
 	b.WriteString("<EstimatedTimetableDelivery")
 	if et.Version != "" {
 		b.WriteString(" version=\"")
@@ -490,7 +482,12 @@ func writeSituationExchangeXML(b *strings.Builder, sx siri.SituationExchange) {
 	b.WriteString("<Situations>")
 	for _, el := range list {
 		b.WriteString("<PtSituationElement>")
-		// Order: ParticipantRef, SituationNumber, Source, Progress, ValidityPeriod (PublicationWindow), UndefinedReason, Severity, ReportType, Summary, Description, Affects
+		// Order per SIRI-SX spec: CreationTime, ParticipantRef, SituationNumber, Version, Source, VersionedAtTime, Progress, ValidityPeriod, UndefinedReason, Severity, Priority, ReportType, Planned, Keywords, Summary, Description, Detail, Advice, Internal, Affects, Consequences, PublishingActions, InfoLinks
+		if el.CreationTime != "" {
+			b.WriteString("<CreationTime>")
+			b.WriteString(xmlEscape(el.CreationTime))
+			b.WriteString("</CreationTime>")
+		}
 		if el.ParticipantRef != "" {
 			b.WriteString("<ParticipantRef>")
 			b.WriteString(xmlEscape(el.ParticipantRef))
@@ -501,10 +498,10 @@ func writeSituationExchangeXML(b *strings.Builder, sx siri.SituationExchange) {
 			b.WriteString(xmlEscape(el.SituationNumber))
 			b.WriteString("</SituationNumber>")
 		}
-		if el.SourceType != "" {
+		if el.Source != nil && el.Source.SourceType != "" {
 			b.WriteString("<Source>")
 			b.WriteString("<SourceType>")
-			b.WriteString(xmlEscape(el.SourceType))
+			b.WriteString(xmlEscape(el.Source.SourceType))
 			b.WriteString("</SourceType>")
 			b.WriteString("</Source>")
 		}
@@ -513,16 +510,16 @@ func writeSituationExchangeXML(b *strings.Builder, sx siri.SituationExchange) {
 			b.WriteString(xmlEscape(el.Progress))
 			b.WriteString("</Progress>")
 		}
-		if el.PublicationWindow.StartTime != "" || el.PublicationWindow.EndTime != "" {
+		for _, vp := range el.ValidityPeriod {
 			b.WriteString("<ValidityPeriod>")
-			if el.PublicationWindow.StartTime != "" {
+			if vp.StartTime != "" {
 				b.WriteString("<StartTime>")
-				b.WriteString(xmlEscape(el.PublicationWindow.StartTime))
+				b.WriteString(xmlEscape(vp.StartTime))
 				b.WriteString("</StartTime>")
 			}
-			if el.PublicationWindow.EndTime != "" {
+			if vp.EndTime != "" {
 				b.WriteString("<EndTime>")
-				b.WriteString(xmlEscape(el.PublicationWindow.EndTime))
+				b.WriteString(xmlEscape(vp.EndTime))
 				b.WriteString("</EndTime>")
 			}
 			b.WriteString("</ValidityPeriod>")
@@ -539,7 +536,7 @@ func writeSituationExchangeXML(b *strings.Builder, sx siri.SituationExchange) {
 			b.WriteString("</ReportType>")
 		}
 		// Multi-language summaries
-		for _, summary := range el.Summaries {
+		for _, summary := range el.Summary {
 			b.WriteString("<Summary")
 			if summary.Lang != "" {
 				b.WriteString(" xml:lang=\"")
@@ -551,7 +548,7 @@ func writeSituationExchangeXML(b *strings.Builder, sx siri.SituationExchange) {
 			b.WriteString("</Summary>")
 		}
 		// Multi-language descriptions
-		for _, desc := range el.Descriptions {
+		for _, desc := range el.Description {
 			b.WriteString("<Description")
 			if desc.Lang != "" {
 				b.WriteString(" xml:lang=\"")
@@ -563,114 +560,96 @@ func writeSituationExchangeXML(b *strings.Builder, sx siri.SituationExchange) {
 			b.WriteString("</Description>")
 		}
 		// Affects block
-		b.WriteString("<Affects>")
-		// Networks > siri.AffectedNetwork > siri.AffectedLine > siri.AffectedRoute
-		if len(el.Affects.Networks) > 0 {
-			b.WriteString("<Networks>")
-			for _, network := range el.Affects.Networks {
-				b.WriteString("<AffectedNetwork>")
-				if network.NetworkRef != "" {
-					b.WriteString("<NetworkRef>")
-					b.WriteString(xmlEscape(network.NetworkRef))
-					b.WriteString("</NetworkRef>")
-				}
-				for _, line := range network.AffectedLines {
-					b.WriteString("<AffectedLine>")
-					if line.LineRef != "" {
-						b.WriteString("<LineRef>")
-						b.WriteString(xmlEscape(line.LineRef))
-						b.WriteString("</LineRef>")
+		if el.Affects != nil {
+			b.WriteString("<Affects>")
+			// Networks > AffectedNetwork > AffectedLine
+			if el.Affects.Networks != nil && len(el.Affects.Networks.AffectedNetwork) > 0 {
+				b.WriteString("<Networks>")
+				for _, network := range el.Affects.Networks.AffectedNetwork {
+					b.WriteString("<AffectedNetwork>")
+					if network.NetworkRef != "" {
+						b.WriteString("<NetworkRef>")
+						b.WriteString(xmlEscape(network.NetworkRef))
+						b.WriteString("</NetworkRef>")
 					}
-					// AffectedRoutes with Direction and StopPoints
-					if len(line.AffectedRoutes) > 0 {
-						for _, route := range line.AffectedRoutes {
-							b.WriteString("<AffectedRoute>")
-							if route.DirectionRef != "" {
-								b.WriteString("<Direction>")
-								b.WriteString("<DirectionRef>")
-								b.WriteString(xmlEscape(route.DirectionRef))
-								b.WriteString("</DirectionRef>")
-								b.WriteString("</Direction>")
+					if network.AffectedLines != nil {
+						for _, line := range network.AffectedLines.AffectedLine {
+							b.WriteString("<AffectedLine>")
+							if line.LineRef != "" {
+								b.WriteString("<LineRef>")
+								b.WriteString(xmlEscape(line.LineRef))
+								b.WriteString("</LineRef>")
 							}
-							if len(route.StopPoints) > 0 {
-								b.WriteString("<StopPoints>")
-								for _, sp := range route.StopPoints {
-									b.WriteString("<AffectedStopPoint>")
-									if sp.StopPointRef != "" {
-										b.WriteString("<StopPointRef>")
-										b.WriteString(xmlEscape(sp.StopPointRef))
-										b.WriteString("</StopPointRef>")
-									}
-									b.WriteString("</AffectedStopPoint>")
-								}
-								b.WriteString("</StopPoints>")
-							}
-							b.WriteString("</AffectedRoute>")
+							b.WriteString("</AffectedLine>")
 						}
 					}
-					b.WriteString("</AffectedLine>")
+					b.WriteString("</AffectedNetwork>")
 				}
-				b.WriteString("</AffectedNetwork>")
+				b.WriteString("</Networks>")
 			}
-			b.WriteString("</Networks>")
-		}
-		// VehicleJourneys
-		if len(el.Affects.VehicleJourneys) > 0 {
-			for _, vj := range el.Affects.VehicleJourneys {
-				b.WriteString("<VehicleJourney>")
-				if vj.DatedVehicleJourneyRef != "" {
-					b.WriteString("<DatedVehicleJourneyRef>")
-					b.WriteString(xmlEscape(vj.DatedVehicleJourneyRef))
-					b.WriteString("</DatedVehicleJourneyRef>")
+			// VehicleJourneys
+			if el.Affects.VehicleJourneys != nil && len(el.Affects.VehicleJourneys.AffectedVehicleJourney) > 0 {
+				for _, vj := range el.Affects.VehicleJourneys.AffectedVehicleJourney {
+					b.WriteString("<VehicleJourney>")
+					if vj.DatedVehicleJourneyRef != "" {
+						b.WriteString("<DatedVehicleJourneyRef>")
+						b.WriteString(xmlEscape(vj.DatedVehicleJourneyRef))
+						b.WriteString("</DatedVehicleJourneyRef>")
+					}
+					if vj.LineRef != "" {
+						b.WriteString("<LineRef>")
+						b.WriteString(xmlEscape(vj.LineRef))
+						b.WriteString("</LineRef>")
+					}
+					b.WriteString("</VehicleJourney>")
 				}
-				if vj.LineRef != "" {
-					b.WriteString("<LineRef>")
-					b.WriteString(xmlEscape(vj.LineRef))
-					b.WriteString("</LineRef>")
-				}
-				if vj.DirectionRef != "" {
-					b.WriteString("<DirectionRef>")
-					b.WriteString(xmlEscape(vj.DirectionRef))
-					b.WriteString("</DirectionRef>")
-				}
-				b.WriteString("</VehicleJourney>")
 			}
-		}
-		// StopPoints (at Affects level for stop-only alerts)
-		if len(el.Affects.StopPoints) > 0 {
-			b.WriteString("<StopPoints>")
-			for _, sp := range el.Affects.StopPoints {
-				b.WriteString("<AffectedStopPoint>")
-				if sp.StopPointRef != "" {
-					b.WriteString("<StopPointRef>")
-					b.WriteString(xmlEscape(sp.StopPointRef))
-					b.WriteString("</StopPointRef>")
+			// StopPoints (at Affects level for stop-only alerts)
+			if el.Affects.StopPoints != nil && len(el.Affects.StopPoints.AffectedStopPoint) > 0 {
+				b.WriteString("<StopPoints>")
+				for _, sp := range el.Affects.StopPoints.AffectedStopPoint {
+					b.WriteString("<AffectedStopPoint>")
+					if sp.StopPointRef != "" {
+						b.WriteString("<StopPointRef>")
+						b.WriteString(xmlEscape(sp.StopPointRef))
+						b.WriteString("</StopPointRef>")
+					}
+					b.WriteString("</AffectedStopPoint>")
 				}
-				b.WriteString("</AffectedStopPoint>")
+				b.WriteString("</StopPoints>")
 			}
-			b.WriteString("</StopPoints>")
+			b.WriteString("</Affects>")
 		}
-		b.WriteString("</Affects>")
 		// InfoLinks block
 		if len(el.InfoLinks) > 0 {
 			b.WriteString("<InfoLinks>")
 			for _, link := range el.InfoLinks {
-				b.WriteString("<InfoLink")
-				if link.Lang != "" {
-					b.WriteString(" xml:lang=\"")
-					b.WriteString(xmlEscape(link.Lang))
-					b.WriteString("\"")
+				b.WriteString("<InfoLink>")
+				if link.Uri != "" {
+					b.WriteString("<Uri>")
+					b.WriteString(xmlEscape(link.Uri))
+					b.WriteString("</Uri>")
 				}
-				b.WriteString(">")
-				b.WriteString(xmlEscape(link.URL))
+				// Label with language
+				for _, label := range link.Label {
+					b.WriteString("<Label")
+					if label.Lang != "" {
+						b.WriteString(" xml:lang=\"")
+						b.WriteString(xmlEscape(label.Lang))
+						b.WriteString("\"")
+					}
+					b.WriteString(">")
+					b.WriteString(xmlEscape(label.Text))
+					b.WriteString("</Label>")
+				}
 				b.WriteString("</InfoLink>")
 			}
 			b.WriteString("</InfoLinks>")
 		}
 		// Consequences block
-		if len(el.Consequences) > 0 {
+		if el.Consequences != nil && len(el.Consequences.Consequence) > 0 {
 			b.WriteString("<Consequences>")
-			for _, c := range el.Consequences {
+			for _, c := range el.Consequences.Consequence {
 				b.WriteString("<Consequence>")
 				if c.Condition != "" {
 					b.WriteString("<Condition>")

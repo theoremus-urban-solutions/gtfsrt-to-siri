@@ -43,7 +43,7 @@ func (c *Converter) buildMVJ(tripID string) siri.MonitoredVehicleJourney {
 		dest = agency + ":Quay:" + destStopID
 	}
 	head := c.gtfs.GetTripHeadsign(tripID)
-	pub := c.gtfs.GetRouteShortName(routeID)
+	_ = c.gtfs.GetRouteShortName(routeID) // pub - not used in current VM spec
 
 	// VehicleRef format: {codespace}:VehicleRef:{vehicle_id}
 	vehRef := ""
@@ -84,21 +84,8 @@ func (c *Converter) buildMVJ(tripID string) siri.MonitoredVehicleJourney {
 	}
 	datedVehicleJourneyRef := agency + ":ServiceJourney:" + tripID
 
-	// OriginAimedDepartureTime fallback order: RT dep at origin, else RT arr at origin, else GTFS static departure time
-	originAimed := ""
-	if originStopID != "" {
-		if dep := c.gtfsrt.GetExpectedDepartureTimeAtStopForTrip(tripID, originStopID); dep > 0 {
-			originAimed = utils.Iso8601FromUnixSeconds(dep)
-		} else if arr := c.gtfsrt.GetExpectedArrivalTimeAtStopForTrip(tripID, originStopID); arr > 0 {
-			originAimed = utils.Iso8601FromUnixSeconds(arr)
-		} else {
-			// Fall back to GTFS static departure time
-			if staticDepTime := c.gtfs.GetDepartureTime(tripID, originStopID); staticDepTime != "" {
-				// Convert HH:MM:SS to ISO8601 timestamp using the start date
-				originAimed = utils.Iso8601FromGTFSTimeAndDate(staticDepTime, startDate)
-			}
-		}
-	}
+	// OriginAimedDepartureTime - not used in current VM spec
+	_ = originStopID // originAimed calculation removed
 
 	// Calculate delay (SIRI-VM spec: required)
 	delay := c.calculateDelay(tripID)
@@ -132,33 +119,37 @@ func (c *Converter) buildMVJ(tripID string) siri.MonitoredVehicleJourney {
 		operatorRef = agency + ":Operator:" + agencyName
 	}
 
+	monitored := true
+	framedRef := &siri.FramedVehicleJourneyRef{
+		DataFrameRef:           dataFrameRef,
+		DatedVehicleJourneyRef: datedVehicleJourneyRef,
+	}
+	vehicleLocation := &siri.Location{
+		Longitude: *lonPtr,
+		Latitude:  *latPtr,
+	}
+
 	return siri.MonitoredVehicleJourney{
-		LineRef:                  lineRef,
-		DirectionRef:             direction,
-		FramedVehicleJourneyRef:  siri.FramedVehicleJourneyRef{DataFrameRef: dataFrameRef, DatedVehicleJourneyRef: datedVehicleJourneyRef},
-		VehicleMode:              vehicleMode,
-		PublishedLineName:        pub,
-		OperatorRef:              operatorRef,
-		OriginRef:                origin,
-		OriginName:               originName,
-		DestinationRef:           dest,
-		DestinationName:          head,
-		OriginAimedDepartureTime: originAimed,
-		SituationRef:             nil,
-		Monitored:                true,
-		InCongestion:             inCongestion,
-		DataSource:               agency, // SIRI-VM spec: required codespace
-		VehicleLocation:          siri.VehicleLocation{Latitude: latPtr, Longitude: lonPtr},
-		Bearing:                  bearing,
-		Velocity:                 velocity, // Speed in m/s from VehiclePosition
-		Occupancy:                occupancy,
-		Delay:                    delay,  // SIRI-VM spec: required
-		VehicleRef:               vehRef, // SIRI-VM spec: {codespace}:VehicleRef:{vehicle_id}
-		ProgressRate:             nil,
-		ProgressStatus:           nil,
-		MonitoredCall:            monitoredCall, // SIRI-VM spec: current/previous stop
-		IsCompleteStopSequence:   false,         // SIRI-VM spec: required, always false
-		OnwardCalls:              nil,           // Remove OnwardCalls for VM (belongs in ET)
+		LineRef:                 lineRef,
+		DirectionRef:            direction,
+		FramedVehicleJourneyRef: framedRef,
+		VehicleMode:             vehicleMode,
+		OperatorRef:             operatorRef,
+		OriginRef:               origin,
+		OriginName:              originName,
+		DestinationRef:          dest,
+		DestinationName:         head,
+		Monitored:               &monitored,
+		DataSource:              agency, // SIRI-VM spec: required codespace
+		VehicleLocation:         vehicleLocation,
+		Bearing:                 bearing,
+		Velocity:                velocity, // Speed in m/s from VehiclePosition
+		Occupancy:               occupancy,
+		Delay:                   delay, // SIRI-VM spec: required
+		InCongestion:            inCongestion,
+		VehicleRef:              vehRef,        // SIRI-VM spec: {codespace}:VehicleRef:{vehicle_id}
+		MonitoredCall:           monitoredCall, // SIRI-VM spec: current/previous stop
+		IsCompleteStopSequence:  false,         // SIRI-VM spec: required, always false
 	}
 }
 
@@ -277,13 +268,16 @@ func (c *Converter) mapCongestionLevel(tripID string) *bool {
 
 // buildMonitoredCall builds MonitoredCall for current/next stop (SIRI-VM spec)
 func (c *Converter) buildMonitoredCall(tripID string) *siri.MonitoredCall {
-	stops := c.gtfsrt.GetOnwardStopIDsForTrip(tripID)
-	if len(stops) == 0 {
-		return nil
+	// For VM, use the current stop from VehiclePosition
+	currentStopID := c.gtfsrt.GetCurrentStopIDForTrip(tripID)
+	if currentStopID == "" {
+		// Fallback to first onward stop from TripUpdates if available
+		stops := c.gtfsrt.GetOnwardStopIDsForTrip(tripID)
+		if len(stops) == 0 {
+			return nil
+		}
+		currentStopID = stops[0]
 	}
-
-	// Use first onward stop as "current" stop
-	currentStopID := stops[0]
 
 	// Check if vehicle is at stop (distance < 50m)
 	agency := c.opts.AgencyID
