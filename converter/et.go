@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/gtfsrt"
-	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/siri"
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/utils"
+	"github.com/theoremus-urban-solutions/transit-types/siri"
 )
 
 // BuildEstimatedTimetable converts GTFS-RT data to SIRI ET format
