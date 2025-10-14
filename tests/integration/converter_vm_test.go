@@ -8,7 +8,7 @@ import (
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/tests/helpers"
 )
 
-// Test VehicleMonitoring conversion with Sofia data
+// Test VehicleMonitoringDelivery conversion with Sofia data
 func TestConverter_VehicleMonitoring_RealData(t *testing.T) {
 	// Load Sofia fixtures
 	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip", "SOFIA")

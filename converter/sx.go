@@ -6,7 +6,7 @@ import (
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/utils"
 )
 
-func (c *Converter) BuildSituationExchange() siri.SituationExchange {
+func (c *Converter) BuildSituationExchange() siri.SituationExchangeDelivery {
 	alerts := c.gtfsrt.GetAlerts()
 	elements := make([]siri.PtSituationElement, 0, len(alerts))
 	now := c.gtfsrt.GetTimestampForFeedMessage()
@@ -172,7 +172,7 @@ func (c *Converter) BuildSituationExchange() siri.SituationExchange {
 		}
 		elements = append(elements, el)
 	}
-	return siri.SituationExchange{Situations: elements}
+	return siri.SituationExchangeDelivery{Situations: elements}
 }
 
 // mapGTFSRTEffectToSIRISeverity maps GTFS-RT Effect to SIRI Severity

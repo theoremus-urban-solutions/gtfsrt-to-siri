@@ -16,7 +16,7 @@ type SiriServiceDelivery struct {
 type VehicleAndSituation struct {
 	ResponseTimestamp          string                            `json:"ResponseTimestamp"`
 	ProducerRef                string                            `json:"ProducerRef,omitempty"`
-	VehicleMonitoringDelivery  []VehicleMonitoring               `json:"VehicleMonitoringDelivery"`
-	SituationExchangeDelivery  []SituationExchange               `json:"SituationExchangeDelivery"`
+	VehicleMonitoringDelivery  []VehicleMonitoringDelivery       `json:"VehicleMonitoringDelivery"`
+	SituationExchangeDelivery  []SituationExchangeDelivery       `json:"SituationExchangeDelivery"`
 	EstimatedTimetableDelivery []siri.EstimatedTimetableDelivery `json:"EstimatedTimetableDelivery"`
 }

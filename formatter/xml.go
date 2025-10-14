@@ -42,7 +42,7 @@ func (rb *responseBuilder) BuildXML(res *siri.SiriResponse) []byte {
 	return []byte(b.String())
 }
 
-func writeVehicleMonitoringXML(b *strings.Builder, vm siri.VehicleMonitoring) {
+func writeVehicleMonitoringXML(b *strings.Builder, vm siri.VehicleMonitoringDelivery) {
 	b.WriteString(`<VehicleMonitoringDelivery version="`)
 	b.WriteString(xmlEscape(vm.Version))
 	b.WriteString(`">`)
@@ -469,7 +469,7 @@ func writeEstimatedTimetableXML(b *strings.Builder, et siritemp.EstimatedTimetab
 	b.WriteString("</EstimatedTimetableDelivery>")
 }
 
-func writeSituationExchangeXML(b *strings.Builder, sx siri.SituationExchange) {
+func writeSituationExchangeXML(b *strings.Builder, sx siri.SituationExchangeDelivery) {
 	list, ok := sx.Situations.([]siri.PtSituationElement)
 	if !ok {
 		// nothing to write

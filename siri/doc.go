@@ -3,9 +3,9 @@
 // SIRI is a European standard (CEN/TS 15531) for real-time public transport information.
 // This package contains Go structs for three SIRI modules:
 //
-//   - VehicleMonitoring (VM): Real-time vehicle locations and status
+//   - VehicleMonitoringDelivery (VM): Real-time vehicle locations and status
 //   - EstimatedTimetable (ET): Complete journey timetables with predictions
-//   - SituationExchange (SX): Service alerts and disruptions
+//   - SituationExchangeDelivery (SX): Service alerts and disruptions
 //
 // All types include JSON and XML struct tags for serialization.
 package siri

@@ -46,7 +46,7 @@ func (c *Converter) GetCompleteVehicleMonitoringResponse() *siri.SiriResponse {
 	timestamp := c.gtfsrt.GetTimestampForFeedMessage()
 	codespace := c.opts.AgencyID
 
-	vm := siri.VehicleMonitoring{
+	vm := siri.VehicleMonitoringDelivery{
 		Version:           "2.0",
 		ResponseTimestamp: utils.Iso8601FromUnixSeconds(timestamp),
 		VehicleActivity:   []siri.VehicleActivity{},
@@ -70,8 +70,8 @@ func (c *Converter) GetCompleteVehicleMonitoringResponse() *siri.SiriResponse {
 	sd := siri.VehicleAndSituation{
 		ResponseTimestamp:         utils.Iso8601FromUnixSeconds(timestamp),
 		ProducerRef:               codespace,
-		VehicleMonitoringDelivery: []siri.VehicleMonitoring{vm},
-		SituationExchangeDelivery: []siri.SituationExchange{},
+		VehicleMonitoringDelivery: []siri.VehicleMonitoringDelivery{vm},
+		SituationExchangeDelivery: []siri.SituationExchangeDelivery{},
 	}
 
 	return &siri.SiriResponse{Siri: siri.SiriServiceDelivery{ServiceDelivery: sd}}

@@ -8,7 +8,7 @@ import (
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/tests/helpers"
 )
 
-// Test SituationExchange conversion
+// Test SituationExchangeDelivery conversion
 func TestConverter_SituationExchange_Basic(t *testing.T) {
 	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip", "SOFIA")
 	gtfsrtData := helpers.LoadGTFSRTFromLocal(t)

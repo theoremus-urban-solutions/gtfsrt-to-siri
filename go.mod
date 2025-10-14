@@ -7,9 +7,10 @@ toolchain go1.24.3
 require (
 	github.com/MobilityData/gtfs-realtime-bindings/golang/gtfs v1.0.0
 	github.com/go-playground/validator/v10 v10.28.0
-	github.com/theoremus-urban-solutions/transit-types v0.0.1
+	github.com/theoremus-urban-solutions/transit-types v0.0.3
 	google.golang.org/protobuf v1.36.10
 	gopkg.in/yaml.v3 v3.0.1
+	github.com/theoremus-urban-solutions/transit-types v0.0.3
 )
 
 require (

@@ -11,7 +11,7 @@ import (
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/tests/helpers"
 )
 
-// TestFormatter_VM_ToXML verifies VehicleMonitoring responses are correctly
+// TestFormatter_VM_ToXML verifies VehicleMonitoringDelivery responses are correctly
 // formatted as valid XML with proper SIRI namespaces and UTF-8 encoding
 func TestFormatter_VM_ToXML(t *testing.T) {
 	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip", "SOFIA")
@@ -69,7 +69,7 @@ func TestFormatter_VM_ToXML(t *testing.T) {
 	t.Logf("✓ Valid VM XML output (%d bytes)", len(xmlBytes))
 }
 
-// TestFormatter_VM_ToJSON verifies VehicleMonitoring responses are correctly
+// TestFormatter_VM_ToJSON verifies VehicleMonitoringDelivery responses are correctly
 // formatted as valid JSON with proper structure
 func TestFormatter_VM_ToJSON(t *testing.T) {
 	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip", "SOFIA")
@@ -198,7 +198,7 @@ func TestFormatter_ET_ToJSON(t *testing.T) {
 	t.Logf("✓ Valid ET JSON output (%d bytes)", len(jsonBytes))
 }
 
-// TestFormatter_SX_ToXML verifies SituationExchange XML formatting
+// TestFormatter_SX_ToXML verifies SituationExchangeDelivery XML formatting
 func TestFormatter_SX_ToXML(t *testing.T) {
 	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip", "SOFIA")
 	gtfsrtData := helpers.LoadGTFSRTFromLocal(t)
@@ -230,7 +230,7 @@ func TestFormatter_SX_ToXML(t *testing.T) {
 	t.Logf("✓ Valid SX XML output (%d bytes)", len(xmlBytes))
 }
 
-// TestFormatter_SX_ToJSON verifies SituationExchange JSON formatting
+// TestFormatter_SX_ToJSON verifies SituationExchangeDelivery JSON formatting
 func TestFormatter_SX_ToJSON(t *testing.T) {
 	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip", "SOFIA")
 	gtfsrtData := helpers.LoadGTFSRTFromLocal(t)
