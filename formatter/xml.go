@@ -4,37 +4,36 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/siri"
-	siritemp "github.com/theoremus-urban-solutions/transit-types/siri"
+	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/utils"
+	"github.com/theoremus-urban-solutions/transit-types/siri"
 )
 
 // BuildXML serializes a SIRI response to XML
-func (rb *responseBuilder) BuildXML(res *siri.SiriResponse) []byte {
+func (rb *responseBuilder) BuildXML(res *utils.SiriResponse) []byte {
 	var b strings.Builder
 	b.WriteString("<Siri xmlns=\"http://www.siri.org.uk/siri\">")
 	// ServiceDelivery
-	sd := res.Siri.ServiceDelivery
 	b.WriteString("<ServiceDelivery>")
-	if sd.ResponseTimestamp != "" {
+	if res.ResponseTimestamp != "" {
 		b.WriteString("<ResponseTimestamp>")
-		b.WriteString(xmlEscape(sd.ResponseTimestamp))
+		b.WriteString(xmlEscape(res.ResponseTimestamp))
 		b.WriteString("</ResponseTimestamp>")
 	}
-	if sd.ProducerRef != "" {
+	if res.ProducerRef != "" {
 		b.WriteString("<ProducerRef>")
-		b.WriteString(xmlEscape(sd.ProducerRef))
+		b.WriteString(xmlEscape(res.ProducerRef))
 		b.WriteString("</ProducerRef>")
 	}
 	// VehicleMonitoringDelivery (support multiple deliveries)
-	for _, vm := range sd.VehicleMonitoringDelivery {
+	for _, vm := range res.VehicleMonitoringDelivery {
 		writeVehicleMonitoringXML(&b, vm)
 	}
 	// EstimatedTimetableDelivery
-	for _, et := range sd.EstimatedTimetableDelivery {
+	for _, et := range res.EstimatedTimetableDelivery {
 		writeEstimatedTimetableXML(&b, et)
 	}
 	// SituationExchangeDelivery
-	for _, sx := range sd.SituationExchangeDelivery {
+	for _, sx := range res.SituationExchangeDelivery {
 		writeSituationExchangeXML(&b, sx)
 	}
 	b.WriteString("</ServiceDelivery>")
@@ -244,7 +243,7 @@ func writeMVJXML(b *strings.Builder, mvj siri.MonitoredVehicleJourney) {
 	b.WriteString("</MonitoredVehicleJourney>")
 }
 
-func writeEstimatedTimetableXML(b *strings.Builder, et siritemp.EstimatedTimetableDelivery) {
+func writeEstimatedTimetableXML(b *strings.Builder, et siri.EstimatedTimetableDelivery) {
 	b.WriteString("<EstimatedTimetableDelivery")
 	if et.Version != "" {
 		b.WriteString(" version=\"")
@@ -470,17 +469,12 @@ func writeEstimatedTimetableXML(b *strings.Builder, et siritemp.EstimatedTimetab
 }
 
 func writeSituationExchangeXML(b *strings.Builder, sx siri.SituationExchangeDelivery) {
-	list, ok := sx.Situations.([]siri.PtSituationElement)
-	if !ok {
-		// nothing to write
-		return
-	}
-	if len(list) == 0 {
+	if len(sx.Situations) == 0 {
 		return
 	}
 	b.WriteString("<SituationExchangeDelivery>")
 	b.WriteString("<Situations>")
-	for _, el := range list {
+	for _, el := range sx.Situations {
 		b.WriteString("<PtSituationElement>")
 		// Order per SIRI-SX spec: CreationTime, ParticipantRef, SituationNumber, Version, Source, VersionedAtTime, Progress, ValidityPeriod, UndefinedReason, Severity, Priority, ReportType, Planned, Keywords, Summary, Description, Detail, Advice, Internal, Affects, Consequences, PublishingActions, InfoLinks
 		if el.CreationTime != "" {

@@ -41,9 +41,9 @@ func TestFormatter_VM_ToXML(t *testing.T) {
 		t.Error("XML should contain <ServiceDelivery>")
 	}
 
-	// Check for VehicleMonitoringDelivery
-	if !strings.Contains(xmlStr, "<VehicleMonitoringDelivery>") {
-		t.Error("XML should contain <VehicleMonitoringDelivery>")
+	// Check for VehicleMonitoringDelivery - note: version is an attribute now
+	if !strings.Contains(xmlStr, "VehicleMonitoringDelivery") {
+		t.Error("XML should contain VehicleMonitoringDelivery")
 	}
 
 	// Check for VehicleActivity
@@ -95,34 +95,28 @@ func TestFormatter_VM_ToJSON(t *testing.T) {
 
 	jsonStr := string(jsonBytes)
 
-	// Check for key fields
-	if !strings.Contains(jsonStr, "\"Siri\"") {
-		t.Error("JSON should contain 'Siri' field")
-	}
-	if !strings.Contains(jsonStr, "\"ServiceDelivery\"") {
-		t.Error("JSON should contain 'ServiceDelivery' field")
-	}
+	// Check for key fields - new flat structure
 	if !strings.Contains(jsonStr, "\"VehicleMonitoringDelivery\"") {
 		t.Error("JSON should contain 'VehicleMonitoringDelivery' field")
 	}
 
-	// Verify structure
-	siri, ok := parsed["Siri"].(map[string]interface{})
+	// Verify structure - flat SiriResponse
+	if parsed["ResponseTimestamp"] == nil {
+		t.Error("Response should have ResponseTimestamp")
+	}
+
+	if parsed["ProducerRef"] == nil {
+		t.Error("Response should have ProducerRef")
+	}
+
+	// Check VehicleMonitoringDelivery array exists
+	vm, ok := parsed["VehicleMonitoringDelivery"].([]interface{})
 	if !ok {
-		t.Fatal("Siri should be an object")
+		t.Fatal("VehicleMonitoringDelivery should be an array")
 	}
 
-	sd, ok := siri["ServiceDelivery"].(map[string]interface{})
-	if !ok {
-		t.Fatal("ServiceDelivery should be an object")
-	}
-
-	if sd["ResponseTimestamp"] == nil {
-		t.Error("ServiceDelivery should have ResponseTimestamp")
-	}
-
-	if sd["ProducerRef"] == nil {
-		t.Error("ServiceDelivery should have ProducerRef")
+	if len(vm) == 0 {
+		t.Fatal("VehicleMonitoringDelivery should have at least one delivery")
 	}
 
 	t.Logf("✓ Valid VM JSON output (%d bytes)", len(jsonBytes))
@@ -395,7 +389,7 @@ func TestFormatter_XML_vs_JSON_Equivalence(t *testing.T) {
 	}
 
 	// Count vehicles in response
-	vehicleCount := len(response.Siri.ServiceDelivery.VehicleMonitoringDelivery[0].VehicleActivity)
+	vehicleCount := len(response.VehicleMonitoringDelivery[0].VehicleActivity)
 
 	// Both formats should have the same vehicle count in the source data
 	// (Note: XML/JSON might have different field occurrences due to structure)

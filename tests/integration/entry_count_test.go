@@ -7,7 +7,6 @@ import (
 	gtfsrtpb "github.com/MobilityData/gtfs-realtime-bindings/golang/gtfs"
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/converter"
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/gtfsrt"
-	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/siri"
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/tests/helpers"
 	"google.golang.org/protobuf/proto"
 )
@@ -52,12 +51,11 @@ func TestVM_EntryCount(t *testing.T) {
 		t.Fatal("VM result should not be nil")
 	}
 
-	vm := result.Siri.ServiceDelivery.VehicleMonitoringDelivery
-	if len(vm) == 0 {
+	if len(result.VehicleMonitoringDelivery) == 0 {
 		t.Fatal("Should have at least one VehicleMonitoringDelivery")
 	}
 
-	outputCount := len(vm[0].VehicleActivity)
+	outputCount := len(result.VehicleMonitoringDelivery[0].VehicleActivity)
 
 	// Verify counts match
 	if outputCount != inputCount {
@@ -168,12 +166,7 @@ func TestSX_EntryCount(t *testing.T) {
 	c := converter.NewConverter(gtfsIndex, gtfsrtData, opts)
 	result := c.BuildSituationExchange()
 
-	situations, ok := result.Situations.([]siri.PtSituationElement)
-	if !ok {
-		t.Fatalf("Expected []siri.PtSituationElement in Situations field, got %T", result.Situations)
-	}
-
-	outputCount := len(situations)
+	outputCount := len(result.Situations)
 
 	// Verify counts match
 	if outputCount != inputCount {

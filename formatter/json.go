@@ -3,7 +3,7 @@ package formatter
 import (
 	"encoding/json"
 
-	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/siri"
+	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/utils"
 )
 
 type responseBuilder struct{}
@@ -16,7 +16,7 @@ func NewResponseBuilder() *responseBuilder {
 }
 
 // BuildJSON serializes a SIRI response to JSON
-func (rb *responseBuilder) BuildJSON(res *siri.SiriResponse) []byte {
+func (rb *responseBuilder) BuildJSON(res *utils.SiriResponse) []byte {
 	b, _ := json.Marshal(res)
 	return b
 }

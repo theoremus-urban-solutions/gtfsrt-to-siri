@@ -23,12 +23,11 @@ func TestConverter_VehicleMonitoring_RealData(t *testing.T) {
 		t.Fatal("VM result should not be nil")
 	}
 
-	vm := result.Siri.ServiceDelivery.VehicleMonitoringDelivery
-	if len(vm) == 0 || len(vm[0].VehicleActivity) == 0 {
+	if len(result.VehicleMonitoringDelivery) == 0 || len(result.VehicleMonitoringDelivery[0].VehicleActivity) == 0 {
 		t.Fatal("Should have at least one vehicle activity")
 	}
 
-	t.Logf("Generated %d vehicle activities", len(vm[0].VehicleActivity))
+	t.Logf("Generated %d vehicle activities", len(result.VehicleMonitoringDelivery[0].VehicleActivity))
 }
 
 // CRITICAL REGRESSION TEST: VehicleMode for Trams
@@ -43,7 +42,7 @@ func TestConverter_VehicleMode_TramRouteTypeZero(t *testing.T) {
 	c := converter.NewConverter(gtfsIndex, gtfsrtData, opts)
 
 	result := c.GetCompleteVehicleMonitoringResponse()
-	vm := result.Siri.ServiceDelivery.VehicleMonitoringDelivery[0]
+	vm := result.VehicleMonitoringDelivery[0]
 
 	// Find a tram vehicle (TM prefix)
 	var found bool
@@ -84,7 +83,7 @@ func TestConverter_Delay_UsesTripID(t *testing.T) {
 	c := converter.NewConverter(gtfsIndex, gtfsrtData, opts)
 
 	result := c.GetCompleteVehicleMonitoringResponse()
-	vm := result.Siri.ServiceDelivery.VehicleMonitoringDelivery[0]
+	vm := result.VehicleMonitoringDelivery[0]
 
 	// Check that some vehicles have non-zero delays
 	hasNonZeroDelay := false
@@ -129,7 +128,7 @@ func TestConverter_Delay_MissingStartDateFallback(t *testing.T) {
 	c := converter.NewConverter(gtfsIndex, gtfsrtData, opts)
 
 	result := c.GetCompleteVehicleMonitoringResponse()
-	vm := result.Siri.ServiceDelivery.VehicleMonitoringDelivery[0]
+	vm := result.VehicleMonitoringDelivery[0]
 
 	// Even with potentially missing start_date, we should get valid VM output
 	if len(vm.VehicleActivity) == 0 {
@@ -160,7 +159,7 @@ func TestConverter_VM_OriginDestination(t *testing.T) {
 	c := converter.NewConverter(gtfsIndex, gtfsrtData, opts)
 
 	result := c.GetCompleteVehicleMonitoringResponse()
-	vm := result.Siri.ServiceDelivery.VehicleMonitoringDelivery[0]
+	vm := result.VehicleMonitoringDelivery[0]
 
 	hasOriginDest := false
 	for _, va := range vm.VehicleActivity {
@@ -187,7 +186,7 @@ func TestConverter_VM_MonitoredCall(t *testing.T) {
 	c := converter.NewConverter(gtfsIndex, gtfsrtData, opts)
 
 	result := c.GetCompleteVehicleMonitoringResponse()
-	vm := result.Siri.ServiceDelivery.VehicleMonitoringDelivery[0]
+	vm := result.VehicleMonitoringDelivery[0]
 
 	hasMonitoredCall := false
 	for _, va := range vm.VehicleActivity {
@@ -220,14 +219,13 @@ func TestConverter_VM_Velocity(t *testing.T) {
 		t.Fatal("VM result should not be nil")
 	}
 
-	vm := result.Siri.ServiceDelivery.VehicleMonitoringDelivery
-	if len(vm) == 0 || len(vm[0].VehicleActivity) == 0 {
+	if len(result.VehicleMonitoringDelivery) == 0 || len(result.VehicleMonitoringDelivery[0].VehicleActivity) == 0 {
 		t.Skip("No vehicle activities in test data")
 	}
 
 	// Check if any vehicle has Velocity populated
 	hasVelocity := false
-	for _, activity := range vm[0].VehicleActivity {
+	for _, activity := range result.VehicleMonitoringDelivery[0].VehicleActivity {
 		mvj := activity.MonitoredVehicleJourney
 		if mvj.Velocity != nil {
 			hasVelocity = true

@@ -4,8 +4,8 @@ import (
 	"math"
 
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/gtfsrt"
-	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/siri"
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/utils"
+	"github.com/theoremus-urban-solutions/transit-types/siri"
 )
 
 func (c *Converter) buildMVJ(tripID string) siri.MonitoredVehicleJourney {

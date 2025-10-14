@@ -5,9 +5,9 @@ import (
 
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/gtfs"
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/gtfsrt"
-	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/siri"
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/tracking"
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/utils"
+	"github.com/theoremus-urban-solutions/transit-types/siri"
 )
 
 // Converter coordinates GTFS, GTFS-RT, and options to produce SIRI responses.
@@ -42,7 +42,7 @@ func NewConverter(gtfsIdx *gtfs.GTFSIndex, rt *gtfsrt.GTFSRTWrapper, opts Conver
 }
 
 // GetCompleteVehicleMonitoringResponse builds a complete VM SIRI response
-func (c *Converter) GetCompleteVehicleMonitoringResponse() *siri.SiriResponse {
+func (c *Converter) GetCompleteVehicleMonitoringResponse() *utils.SiriResponse {
 	timestamp := c.gtfsrt.GetTimestampForFeedMessage()
 	codespace := c.opts.AgencyID
 
@@ -67,14 +67,14 @@ func (c *Converter) GetCompleteVehicleMonitoringResponse() *siri.SiriResponse {
 	}
 
 	// Use shared ServiceDelivery builder
-	sd := siri.VehicleAndSituation{
+	sd := utils.SiriResponse{
 		ResponseTimestamp:         utils.Iso8601FromUnixSeconds(timestamp),
 		ProducerRef:               codespace,
 		VehicleMonitoringDelivery: []siri.VehicleMonitoringDelivery{vm},
 		SituationExchangeDelivery: []siri.SituationExchangeDelivery{},
 	}
 
-	return &siri.SiriResponse{Siri: siri.SiriServiceDelivery{ServiceDelivery: sd}}
+	return &sd
 }
 
 // GetState returns the current converter state as JSON

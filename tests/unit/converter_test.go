@@ -9,7 +9,6 @@ import (
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/converter"
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/gtfs"
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/gtfsrt"
-	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/siri"
 )
 
 // createMinimalGTFSZip creates a minimal valid GTFS zip for testing
@@ -193,12 +192,11 @@ func TestConverter_EmptyData(t *testing.T) {
 		t.Fatal("Should return response even with no data")
 	}
 
-	vm := response.Siri.ServiceDelivery.VehicleMonitoringDelivery
-	if len(vm) == 0 {
+	if len(response.VehicleMonitoringDelivery) == 0 {
 		t.Error("Should have at least one delivery even if empty")
 	}
 
-	if len(vm[0].VehicleActivity) > 0 {
+	if len(response.VehicleMonitoringDelivery[0].VehicleActivity) > 0 {
 		t.Error("Should have no vehicles with empty data")
 	}
 
@@ -241,12 +239,7 @@ func TestConverter_SXEmptyData(t *testing.T) {
 	sx := c.BuildSituationExchange()
 
 	// Should return structure even with no alerts
-	situations, ok := sx.Situations.([]siri.PtSituationElement)
-	if !ok {
-		t.Error("Situations should be []PtSituationElement")
-	}
-
-	if len(situations) != 0 {
+	if len(sx.Situations) != 0 {
 		t.Error("Should have no situations with empty data")
 	}
 
