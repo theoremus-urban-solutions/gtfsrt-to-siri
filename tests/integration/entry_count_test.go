@@ -18,7 +18,7 @@ func TestVM_EntryCount(t *testing.T) {
 	gtfsrtData := helpers.LoadGTFSRTFromLocal(t)
 
 	// Count input VehiclePositions
-	vpData, err := helpers.LoadProtobufFile("vehicle-positions.pb")
+	vpData, err := helpers.LoadProtobufFile("vehicle-positions.pbf")
 	if err != nil {
 		t.Fatalf("Failed to load vehicle positions: %v", err)
 	}
@@ -61,7 +61,7 @@ func TestET_EntryCount(t *testing.T) {
 	gtfsrtData := helpers.LoadGTFSRTFromLocal(t)
 
 	// Count input TripUpdates
-	tuData, err := helpers.LoadProtobufFile("trip-updates.pb")
+	tuData, err := helpers.LoadProtobufFile("trip-updates.pbf")
 	if err != nil {
 		t.Fatalf("Failed to load trip updates: %v", err)
 	}
@@ -112,7 +112,7 @@ func TestSX_EntryCount(t *testing.T) {
 	gtfsrtData := helpers.LoadGTFSRTFromLocal(t)
 
 	// Count input Alerts
-	saData, err := helpers.LoadProtobufFile("service-alerts.pb")
+	saData, err := helpers.LoadProtobufFile("alerts.pbf")
 	if err != nil {
 		t.Fatalf("Failed to load service alerts: %v", err)
 	}

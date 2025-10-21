@@ -14,9 +14,9 @@ func LoadGTFSRTFromLocal(t *testing.T) *gtfsrt.GTFSRTWrapper {
 	t.Helper()
 
 	basePath := GetTestDataPath()
-	vpPath := basePath + "/gtfsrt/vehicle-positions.pb"
-	tuPath := basePath + "/gtfsrt/trip-updates.pb"
-	saPath := basePath + "/gtfsrt/service-alerts.pb"
+	vpPath := basePath + "/gtfsrt/vehicle-positions.pbf"
+	tuPath := basePath + "/gtfsrt/trip-updates.pbf"
+	saPath := basePath + "/gtfsrt/alerts.pbf"
 
 	// Read raw protobuf bytes
 	vpData, err := os.ReadFile(vpPath)

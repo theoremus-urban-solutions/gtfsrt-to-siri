@@ -15,133 +15,100 @@ func (g *GTFSIndex) GetStopDistanceAlongRouteForTripInMeters(gtfsTripKey, stopID
 
 // GetStopDistanceAlongRouteForTripInKilometers returns the distance in kilometers
 func (g *GTFSIndex) GetStopDistanceAlongRouteForTripInKilometers(gtfsTripKey, stopID string) float64 {
-	shapeID := g.GetShapeIDForTrip(gtfsTripKey)
-	if shapeID == "" {
+	stopSeq := g.TripStopSeq[gtfsTripKey]
+	if len(stopSeq) == 0 {
 		return 0
 	}
-	pts := g.ShapePoints[shapeID]
-	if len(pts) < 2 {
+
+	// Find stop index in sequence
+	stopIdx := -1
+	for i, s := range stopSeq {
+		if s == stopID {
+			stopIdx = i
+			break
+		}
+	}
+	if stopIdx < 0 {
 		return 0
 	}
-	coord, ok := g.stopCoord[stopID]
-	if !ok {
-		return 0
+
+	// Sum haversine distances from first stop to target stop
+	cumKM := 0.0
+	for i := 0; i < stopIdx; i++ {
+		c1, ok1 := g.StopCoord[stopSeq[i]]
+		c2, ok2 := g.StopCoord[stopSeq[i+1]]
+		if !ok1 || !ok2 {
+			continue
+		}
+		cumKM += HasversineKM(c1[1], c1[0], c2[1], c2[0])
 	}
-	segIdx, t, _ := NearestSegmentProjection(pts, coord)
-	cum := g.ShapeCumKM[shapeID]
-	if segIdx < 0 || segIdx >= len(cum) {
-		return 0
-	}
-	if segIdx == len(pts)-1 {
-		return cum[segIdx]
-	}
-	// add fractional distance within the segment
-	segKM := HasversineKM(pts[segIdx][1], pts[segIdx][0], pts[segIdx+1][1], pts[segIdx+1][0])
-	return cum[segIdx] + t*segKM
+	return cumKM
 }
 
 // GetCoordinateAtDistanceForTrip returns a lon,lat point on the trip's shape at a target distance in KM
 func (g *GTFSIndex) GetCoordinateAtDistanceForTrip(gtfsTripKey string, targetKM float64) (float64, float64, bool) {
-	shapeID := g.GetShapeIDForTrip(gtfsTripKey)
-	pts := g.ShapePoints[shapeID]
-	cum := g.ShapeCumKM[shapeID]
-	if len(pts) == 0 || len(cum) == 0 {
+	stopSeq := g.TripStopSeq[gtfsTripKey]
+	if len(stopSeq) < 2 {
 		return 0, 0, false
 	}
+
+	// Build cumulative distances between stops
+	cumKM := make([]float64, len(stopSeq))
+	cumKM[0] = 0
+	for i := 1; i < len(stopSeq); i++ {
+		c1, ok1 := g.StopCoord[stopSeq[i-1]]
+		c2, ok2 := g.StopCoord[stopSeq[i]]
+		if !ok1 || !ok2 {
+			cumKM[i] = cumKM[i-1]
+			continue
+		}
+		cumKM[i] = cumKM[i-1] + HasversineKM(c1[1], c1[0], c2[1], c2[0])
+	}
+
+	// Handle edge cases
 	if targetKM <= 0 {
-		return pts[0][0], pts[0][1], true
+		if coord, ok := g.StopCoord[stopSeq[0]]; ok {
+			return coord[0], coord[1], true
+		}
+		return 0, 0, false
 	}
-	if targetKM >= cum[len(cum)-1] {
-		last := pts[len(pts)-1]
-		return last[0], last[1], true
+	if targetKM >= cumKM[len(cumKM)-1] {
+		if coord, ok := g.StopCoord[stopSeq[len(stopSeq)-1]]; ok {
+			return coord[0], coord[1], true
+		}
+		return 0, 0, false
 	}
-	// binary search for segment
-	lo := 0
-	hi := len(cum) - 1
-	for lo < hi {
-		mid := (lo + hi) / 2
-		if cum[mid] < targetKM {
-			lo = mid + 1
-		} else {
-			hi = mid
+
+	// Find segment containing targetKM
+	segIdx := 0
+	for i := 1; i < len(cumKM); i++ {
+		if cumKM[i] >= targetKM {
+			segIdx = i - 1
+			break
 		}
 	}
-	i := lo
-	if i == 0 {
-		i = 1
-	}
-	prevKM := cum[i-1]
-	nextKM := cum[i]
-	segLen := nextKM - prevKM
+
+	// Interpolate between stops
+	prevKM := cumKM[segIdx]
+	nextKM := cumKM[segIdx+1]
 	t := 0.0
-	if segLen > 0 {
-		t = (targetKM - prevKM) / segLen
+	if nextKM > prevKM {
+		t = (targetKM - prevKM) / (nextKM - prevKM)
 	}
-	ax, ay := pts[i-1][0], pts[i-1][1]
-	bx, by := pts[i][0], pts[i][1]
-	lon := ax + t*(bx-ax)
-	lat := ay + t*(by-ay)
+
+	c1, ok1 := g.StopCoord[stopSeq[segIdx]]
+	c2, ok2 := g.StopCoord[stopSeq[segIdx+1]]
+	if !ok1 || !ok2 {
+		return 0, 0, false
+	}
+
+	lon := c1[0] + t*(c2[0]-c1[0])
+	lat := c1[1] + t*(c2[1]-c1[1])
+
 	return lon, lat, true
 }
 
 // Helpers
-
-func cumulativeKM(pts [][2]float64) []float64 {
-	cum := make([]float64, len(pts))
-	if len(pts) == 0 {
-		return cum
-	}
-	cum[0] = 0
-	for i := 1; i < len(pts); i++ {
-		cum[i] = cum[i-1] + HasversineKM(pts[i-1][1], pts[i-1][0], pts[i][1], pts[i][0])
-	}
-	return cum
-}
-
-
-// nearestSegmentProjection finds the segment index i (between pts[i] and pts[i+1])
-// that is closest to the given coordinate, and returns the clamped projection
-// parameter t in [0,1] along that segment and the snapped lon/lat point.
-func NearestSegmentProjection(pts [][2]float64, coord [2]float64) (int, float64, [2]float64) {
-	bestIdx := -1
-	bestT := 0.0
-	var bestSnap [2]float64
-	bestDist2 := math.MaxFloat64
-	cx := coord[0]
-	cy := coord[1]
-	for i := 0; i+1 < len(pts); i++ {
-		ax := pts[i][0]
-		ay := pts[i][1]
-		bx := pts[i+1][0]
-		by := pts[i+1][1]
-		vx := bx - ax
-		vy := by - ay
-		wx := cx - ax
-		wy := cy - ay
-		denom := vx*vx + vy*vy
-		t := 0.0
-		if denom > 0 {
-			t = (wx*vx + wy*vy) / denom
-		}
-		if t < 0 {
-			t = 0
-		} else if t > 1 {
-			t = 1
-		}
-		sx := ax + t*vx
-		sy := ay + t*vy
-		dx := cx - sx
-		dy := cy - sy
-		dist2 := dx*dx + dy*dy
-		if dist2 < bestDist2 {
-			bestDist2 = dist2
-			bestIdx = i
-			bestT = t
-			bestSnap = [2]float64{sx, sy}
-		}
-	}
-	return bestIdx, bestT, bestSnap
-}
 
 func HasversineKM(lat1, lon1, lat2, lon2 float64) float64 {
 	const R = 6371.0

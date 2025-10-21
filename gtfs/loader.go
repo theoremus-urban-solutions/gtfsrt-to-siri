@@ -73,18 +73,12 @@ func NewGTFSIndexFromReader(r io.ReaderAt, size int64, agencyID string) (*GTFSIn
 		tripOriginStop:      map[string]string{},
 		tripDestStop:        map[string]string{},
 		tripDirection:       map[string]string{},
-		tripShapeID:         map[string]string{},
 		tripBlockID:         map[string]string{},
-		TripStopSeq:         map[string][]string{},
-		tripStopIdx:         map[string]map[string]int{},
-		stopNames:           map[string]string{},
-		stopCoord:           map[string][2]float64{},
-		ShapePoints:         map[string][][2]float64{},
-		ShapeCumKM:          map[string][]float64{},
-		stopTimePickupType:  map[string]map[string]int{},
-		stopTimeDropOffType: map[string]map[string]int{},
-		stopTimeArrival:     map[string]map[string]string{},
-		stopTimeDeparture:   map[string]map[string]string{},
+		TripStopSeq: map[string][]string{},
+		tripStopIdx: map[string]map[string]int{},
+		stopNames:   map[string]string{},
+		StopCoord:   map[string][2]float64{},
+		stopTimes:   map[string]map[string]StopTime{},
 	}
 
 	// Parse GTFS files from zip
@@ -100,16 +94,11 @@ func (g *GTFSIndex) parseGTFSFiles(zipReader *zip.Reader) error {
 	for _, f := range zipReader.File {
 		name := strings.ToLower(f.Name)
 		if name == "routes.txt" || name == "trips.txt" || name == "stops.txt" ||
-			name == "stop_times.txt" || name == "agency.txt" || name == "shapes.txt" {
+			name == "stop_times.txt" || name == "agency.txt" {
 			if err := g.consumeCSV(f); err != nil {
 				return err
 			}
 		}
-	}
-
-	// Calculate cumulative distances for shapes
-	for shapeID, pts := range g.ShapePoints {
-		g.ShapeCumKM[shapeID] = cumulativeKM(pts)
 	}
 
 	return nil
@@ -160,7 +149,6 @@ func (g *GTFSIndex) consumeCSV(f *zip.File) error {
 		tID := idx("trip_id")
 		hs := idx("trip_headsign")
 		dir := idx("direction_id")
-		sh := idx("shape_id")
 		blk := idx("block_id")
 		for _, row := range rec[1:] {
 			if tID >= 0 && rID >= 0 {
@@ -171,9 +159,6 @@ func (g *GTFSIndex) consumeCSV(f *zip.File) error {
 			}
 			if tID >= 0 && dir >= 0 {
 				g.tripDirection[row[tID]] = row[dir]
-			}
-			if tID >= 0 && sh >= 0 {
-				g.tripShapeID[row[tID]] = row[sh]
 			}
 			if tID >= 0 && blk >= 0 {
 				g.tripBlockID[row[tID]] = row[blk]
@@ -191,7 +176,7 @@ func (g *GTFSIndex) consumeCSV(f *zip.File) error {
 			if sID >= 0 && sLat >= 0 && sLon >= 0 {
 				lat, _ := strconv.ParseFloat(row[sLat], 64)
 				lon, _ := strconv.ParseFloat(row[sLon], 64)
-				g.stopCoord[row[sID]] = [2]float64{lon, lat}
+				g.StopCoord[row[sID]] = [2]float64{lon, lat}
 			}
 		}
 	case "stop_times.txt":
@@ -249,11 +234,8 @@ func (g *GTFSIndex) consumeCSV(f *zip.File) error {
 				g.tripOriginStop[trip] = arr[0].stop
 				g.tripDestStop[trip] = arr[len(arr)-1].stop
 			}
-			// Initialize maps for this trip
-			g.stopTimePickupType[trip] = make(map[string]int)
-			g.stopTimeDropOffType[trip] = make(map[string]int)
-			g.stopTimeArrival[trip] = make(map[string]string)
-			g.stopTimeDeparture[trip] = make(map[string]string)
+			// Initialize map for this trip
+			g.stopTimes[trip] = make(map[string]StopTime)
 			// stop sequence + index map + stop times data
 			seqStops := make([]string, 0, len(arr))
 			idxMap := make(map[string]int, len(arr))
@@ -262,14 +244,12 @@ func (g *GTFSIndex) consumeCSV(f *zip.File) error {
 				if _, ok := idxMap[v.stop]; !ok {
 					idxMap[v.stop] = i
 				}
-				// Store pickup/dropoff types and times
-				g.stopTimePickupType[trip][v.stop] = v.pickupType
-				g.stopTimeDropOffType[trip][v.stop] = v.dropOffType
-				if v.arrTime != "" {
-					g.stopTimeArrival[trip][v.stop] = v.arrTime
-				}
-				if v.depTime != "" {
-					g.stopTimeDeparture[trip][v.stop] = v.depTime
+				// Store stop time data in consolidated struct
+				g.stopTimes[trip][v.stop] = StopTime{
+					ArrivalTime:   v.arrTime,
+					DepartureTime: v.depTime,
+					PickupType:    int8(v.pickupType),
+					DropOffType:   int8(v.dropOffType),
 				}
 			}
 			g.TripStopSeq[trip] = seqStops
@@ -289,36 +269,6 @@ func (g *GTFSIndex) consumeCSV(f *zip.File) error {
 			if agName >= 0 {
 				g.agencyName = rec[1][agName]
 			}
-		}
-	case "shapes.txt":
-		sh := idx("shape_id")
-		latIdx := idx("shape_pt_lat")
-		lonIdx := idx("shape_pt_lon")
-		seqIdx := idx("shape_pt_sequence")
-		if sh < 0 || latIdx < 0 || lonIdx < 0 || seqIdx < 0 {
-			return nil
-		}
-		tmp := map[string][]struct {
-			lon, lat float64
-			seq      int
-		}{}
-		for _, row := range rec[1:] {
-			shapeID := row[sh]
-			lat, _ := strconv.ParseFloat(row[latIdx], 64)
-			lon, _ := strconv.ParseFloat(row[lonIdx], 64)
-			seq, _ := strconv.Atoi(row[seqIdx])
-			tmp[shapeID] = append(tmp[shapeID], struct {
-				lon, lat float64
-				seq      int
-			}{lon, lat, seq})
-		}
-		for shapeID, arr := range tmp {
-			sort.Slice(arr, func(i, j int) bool { return arr[i].seq < arr[j].seq })
-			pts := make([][2]float64, len(arr))
-			for i, p := range arr {
-				pts[i] = [2]float64{p.lon, p.lat}
-			}
-			g.ShapePoints[shapeID] = pts
 		}
 	}
 	return nil
