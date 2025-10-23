@@ -1,6 +1,8 @@
 package converter
 
 import (
+	"log"
+
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/gtfsrt"
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/siri"
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/utils"
@@ -33,6 +35,10 @@ func (c *Converter) BuildSituationExchange() siri.SituationExchange {
 			summaryBG := causeBG + ": " + effectBG
 			summaries = append(summaries, siri.LocalizedText{Lang: "bg", Text: summaryBG})
 		}
+		// Log if no summary available
+		if len(summaries) == 0 {
+			log.Printf("[SX] WARNING: alert %s has no header_text/summary", a.ID)
+		}
 
 		// Build localized descriptions
 		descriptions := []siri.LocalizedText{}
@@ -49,6 +55,10 @@ func (c *Converter) BuildSituationExchange() siri.SituationExchange {
 				description = effectPrefix + ": " + a.Description
 			}
 			descriptions = append(descriptions, siri.LocalizedText{Lang: "en", Text: description})
+		}
+		// Log if no description available
+		if len(descriptions) == 0 {
+			log.Printf("[SX] WARNING: alert %s has no description_text", a.ID)
 		}
 
 		// Build InfoLinks from URLs
@@ -99,8 +109,15 @@ func (c *Converter) BuildSituationExchange() siri.SituationExchange {
 			vj := siri.AffectedVehicleJourney{
 				DatedVehicleJourneyRef: gtfsrt.TripKeyForConverter(tid, c.opts.AgencyID, c.gtfsrt.GetStartDateForTrip(tid)),
 			}
-			// LineRef with codespace prefix
-			if rid := c.gtfsrt.GetRouteIDForTrip(tid); rid != "" {
+			// LineRef with codespace prefix - try GTFS-RT first, then static GTFS (ALWAYS use plain tripID for static)
+			rid := c.gtfsrt.GetRouteIDForTrip(tid)
+			if rid == "" {
+				rid = c.gtfs.GetRouteIDForTrip(tid)
+				if rid == "" {
+					log.Printf("[SX] WARNING: alert %s trip %s has no route_id in GTFS-RT or static GTFS", a.ID, tid)
+				}
+			}
+			if rid != "" {
 				vj.LineRef = codespace + ":Line:" + rid
 			}
 			if dir := c.gtfsrt.GetRouteDirectionForTrip(tid); dir != "" {
@@ -125,9 +142,18 @@ func (c *Converter) BuildSituationExchange() siri.SituationExchange {
 
 		// Build StopPoints for stop-only alerts (at Affects level)
 		for _, sid := range a.StopIDs {
+			// Check if stop exists in static GTFS
+			if stopName := c.gtfs.GetStopName(sid); stopName == "" {
+				log.Printf("[SX] WARNING: alert %s stop %s not found in static GTFS", a.ID, sid)
+			}
 			el.Affects.StopPoints = append(el.Affects.StopPoints, siri.AffectedStopPoint{
 				StopPointRef: applyFieldMutators(sid, c.opts.FieldMutators.StopPointRef),
 			})
+		}
+
+		// Log if alert has no informed entities (system-wide alert)
+		if len(a.TripIDs) == 0 && len(a.RouteIDs) == 0 && len(a.StopIDs) == 0 {
+			log.Printf("[SX] INFO: alert %s has no informed entities (system-wide alert)", a.ID)
 		}
 		// Add siri.Consequences derived from GTFS-RT Effect
 		if cond := effectToCondition(a.Effect); cond != "" {
