@@ -64,21 +64,21 @@ func NewGTFSIndexFromReader(r io.ReaderAt, size int64, agencyID string) (*GTFSIn
 
 	// Initialize index
 	index := &GTFSIndex{
-		agencyID:            agencyID,
-		routeShortNames:     map[string]string{},
-		routeTypes:          map[string]int{},
-		routes:              map[string]struct{}{},
-		tripToRoute:         map[string]string{},
-		tripHeadsign:        map[string]string{},
-		tripOriginStop:      map[string]string{},
-		tripDestStop:        map[string]string{},
-		tripDirection:       map[string]string{},
-		tripBlockID:         map[string]string{},
-		TripStopSeq: map[string][]string{},
-		tripStopIdx: map[string]map[string]int{},
-		stopNames:   map[string]string{},
-		StopCoord:   map[string][2]float64{},
-		stopTimes:   map[string]map[string]StopTime{},
+		agencyID:        agencyID,
+		routeShortNames: map[string]string{},
+		routeTypes:      map[string]int{},
+		routes:          map[string]struct{}{},
+		tripToRoute:     map[string]string{},
+		tripHeadsign:    map[string]string{},
+		tripOriginStop:  map[string]string{},
+		tripDestStop:    map[string]string{},
+		tripDirection:   map[string]string{},
+		tripBlockID:     map[string]string{},
+		TripStopSeq:     map[string][]string{},
+		tripStopIdx:     map[string]map[string]int{},
+		stopNames:       map[string]string{},
+		StopCoord:       map[string][2]float64{},
+		stopTimes:       map[string]map[string]StopTime{},
 	}
 
 	// Parse GTFS files from zip
@@ -113,6 +113,7 @@ func (g *GTFSIndex) consumeCSV(f *zip.File) error {
 	}
 	defer func() { _ = r.Close() }()
 	csvr := csv.NewReader(r)
+	csvr.LazyQuotes = true // Handle malformed CSV with quotes
 	rec, err := csvr.ReadAll()
 	if err != nil {
 		return err
@@ -121,6 +122,10 @@ func (g *GTFSIndex) consumeCSV(f *zip.File) error {
 		return nil
 	}
 	head := rec[0]
+	// Strip UTF-8 BOM from first column header if present
+	if len(head) > 0 {
+		head[0] = strings.TrimPrefix(head[0], "\ufeff")
+	}
 	idx := func(col string) int {
 		for i, h := range head {
 			if strings.EqualFold(h, col) {

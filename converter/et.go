@@ -2,9 +2,9 @@ package converter
 
 import (
 	"fmt"
+	"log"
 	"time"
 
-	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/gtfsrt"
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/siri"
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/utils"
 )
@@ -41,10 +41,16 @@ func (c *Converter) BuildEstimatedTimetable() siri.EstimatedTimetable {
 }
 
 func (c *Converter) buildEstimatedVehicleJourney(tripID string, now int64, agencyID string) *siri.EstimatedVehicleJourney {
-	// Get route and direction
+	// Get route and direction - try GTFS-RT first, then fall back to static GTFS
+	// IMPORTANT: Always use plain tripID for GTFS static lookups (never composite keys)
 	routeID := c.gtfsrt.GetRouteIDForTrip(tripID)
 	if routeID == "" {
-		return nil
+		// Try to get from static GTFS trips.txt using plain trip_id
+		routeID = c.gtfs.GetRouteIDForTrip(tripID)
+		if routeID == "" {
+			log.Printf("[ET] WARNING: trip %s has no route_id in GTFS-RT or static GTFS, using 'UNKNOWN'", tripID)
+			routeID = "UNKNOWN"
+		}
 	}
 
 	directionID := c.gtfsrt.GetRouteDirectionForTrip(tripID)
@@ -52,14 +58,14 @@ func (c *Converter) buildEstimatedVehicleJourney(tripID string, now int64, agenc
 		directionID = "0"
 	}
 
-	// Get trip key
+	// Get start date for SIRI output
 	startDate := c.gtfsrt.GetStartDateForTrip(tripID)
-	tripKey := gtfsrt.TripKeyForConverter(tripID, agencyID, startDate)
 
 	// Build siri.FramedVehicleJourneyRef
 	dataFrameRef := startDate
 	if dataFrameRef == "" {
 		dataFrameRef = utils.Iso8601DateFromUnixSeconds(now)
+		log.Printf("[ET] WARNING: trip %s has no start_date, using current date", tripID)
 	}
 	datedVehicleJourneyRef := agencyID + ":ServiceJourney:" + tripID
 
@@ -69,28 +75,27 @@ func (c *Converter) buildEstimatedVehicleJourney(tripID string, now int64, agenc
 		vehicleRef = agencyID + ":VehicleRef:" + rawVehicleID
 	}
 
-	// Get complete stop sequence from GTFS static
-	// Determine which key to use for static GTFS lookups
-	gtfsLookupKey := tripKey
-	stopSequence := c.gtfs.TripStopSeq[gtfsLookupKey]
-	if len(stopSequence) == 0 {
-		// Try with just trip_id if agency-prefixed key doesn't work
-		gtfsLookupKey = tripID
-		stopSequence = c.gtfs.TripStopSeq[gtfsLookupKey]
-	}
+	// Get complete stop sequence from GTFS static - ALWAYS use plain tripID for static GTFS
+	stopSequence := c.gtfs.TripStopSeq[tripID]
+
+	var recordedCalls []siri.RecordedCall
+	var estimatedCalls []siri.EstimatedCall
 
 	if len(stopSequence) == 0 {
-		// Trip exists in GTFS-RT but not in GTFS static - skip it
-		return nil
+		// Trip exists in GTFS-RT but not in GTFS static - build calls from RT only
+		log.Printf("[ET] WARNING: trip %s not found in static GTFS, building minimal calls from GTFS-RT only", tripID)
+		recordedCalls, estimatedCalls = c.buildCallSequenceFromRTOnly(tripID, now)
+	} else {
+		// Split into siri.RecordedCalls and siri.EstimatedCalls (always use plain tripID for static GTFS)
+		recordedCalls, estimatedCalls = c.buildCallSequence(tripID, tripID, stopSequence, now)
 	}
-
-	// Split into siri.RecordedCalls and siri.EstimatedCalls
-	recordedCalls, estimatedCalls := c.buildCallSequence(tripID, gtfsLookupKey, stopSequence, now)
 
 	// Get VehicleMode from route_type
 	vehicleMode := ""
 	if routeType := c.gtfs.GetRouteType(routeID); routeType > 0 {
 		vehicleMode = mapGTFSRouteTypeToSIRIVehicleMode(routeType)
+	} else if routeID != "UNKNOWN" {
+		log.Printf("[ET] WARNING: trip %s route %s has no route_type in static GTFS", tripID, routeID)
 	}
 
 	// Get Origin and Destination names from first/last stop in calls
@@ -99,6 +104,12 @@ func (c *Converter) buildEstimatedVehicleJourney(tripID string, now int64, agenc
 	if len(stopSequence) > 0 {
 		originName = c.gtfs.GetStopName(stopSequence[0])
 		destinationName = c.gtfs.GetStopName(stopSequence[len(stopSequence)-1])
+		if originName == "" {
+			log.Printf("[ET] WARNING: trip %s origin stop %s has no name in static GTFS", tripID, stopSequence[0])
+		}
+		if destinationName == "" {
+			log.Printf("[ET] WARNING: trip %s destination stop %s has no name in static GTFS", tripID, stopSequence[len(stopSequence)-1])
+		}
 	}
 
 	// OperatorRef from agency_name
@@ -154,8 +165,15 @@ func (c *Converter) buildCallSequence(tripID, gtfsLookupKey string, stopSequence
 		rtDeparture := c.gtfsrt.GetExpectedDepartureTimeAtStopForTrip(tripID, stopID)
 
 		// Get static GTFS times using gtfsLookupKey (the key that successfully found stopSequence)
-		staticArrival := gtfsTimeToUnixTimestamp(c.gtfs.GetArrivalTime(gtfsLookupKey, stopID), startDate)
-		staticDeparture := gtfsTimeToUnixTimestamp(c.gtfs.GetDepartureTime(gtfsLookupKey, stopID), startDate)
+		staticArrivalStr := c.gtfs.GetArrivalTime(gtfsLookupKey, stopID)
+		staticDepartureStr := c.gtfs.GetDepartureTime(gtfsLookupKey, stopID)
+		staticArrival := gtfsTimeToUnixTimestamp(staticArrivalStr, startDate)
+		staticDeparture := gtfsTimeToUnixTimestamp(staticDepartureStr, startDate)
+
+		// Log warnings for missing static times
+		if staticArrivalStr == "" && staticDepartureStr == "" {
+			log.Printf("[ET] WARNING: trip %s stop %s has no static times in GTFS", tripID, stopID)
+		}
 
 		// Determine if this is a past or future stop
 		isPastStop := false
@@ -167,6 +185,9 @@ func (c *Converter) buildCallSequence(tripID, gtfsLookupKey string, stopSequence
 
 		// Get stop name
 		stopName := c.gtfs.GetStopName(stopID)
+		if stopName == "" {
+			log.Printf("[ET] WARNING: trip %s stop %s has no name in static GTFS", tripID, stopID)
+		}
 
 		// Format StopPointRef as {codespace}:Quay:{stop_id}, then apply field mutators
 		stopPointRef := applyFieldMutators(agencyID+":Quay:"+stopID, c.opts.FieldMutators.StopPointRef)
@@ -201,9 +222,13 @@ func (c *Converter) buildCallSequence(tripID, gtfsLookupKey string, stopSequence
 			// Set actual times from GTFS-RT
 			if rtArrival > 0 {
 				call.ActualArrivalTime = utils.Iso8601ExtendedFromUnixSeconds(rtArrival)
+			} else if staticArrival == 0 {
+				log.Printf("[ET] WARNING: trip %s stop %s has no arrival time (neither RT nor static)", tripID, stopID)
 			}
 			if rtDeparture > 0 {
 				call.ActualDepartureTime = utils.Iso8601ExtendedFromUnixSeconds(rtDeparture)
+			} else if staticDeparture == 0 {
+				log.Printf("[ET] WARNING: trip %s stop %s has no departure time (neither RT nor static)", tripID, stopID)
 			}
 
 			recordedCalls = append(recordedCalls, call)
@@ -235,7 +260,14 @@ func (c *Converter) buildCallSequence(tripID, gtfsLookupKey string, stopSequence
 					call.ExpectedArrivalTime = utils.Iso8601ExtendedFromUnixSeconds(staticArrival)
 					call.ArrivalStatus = "onTime"
 				}
+			} else if rtArrival > 0 {
+				// No static time, but we have RT time - use it
+				call.ExpectedArrivalTime = utils.Iso8601ExtendedFromUnixSeconds(rtArrival)
+				call.ArrivalStatus = "onTime"
+			} else {
+				log.Printf("[ET] WARNING: trip %s stop %s has no arrival time (neither RT nor static)", tripID, stopID)
 			}
+
 			if staticDeparture > 0 {
 				if rtDeparture > 0 {
 					call.ExpectedDepartureTime = utils.Iso8601ExtendedFromUnixSeconds(rtDeparture)
@@ -245,6 +277,98 @@ func (c *Converter) buildCallSequence(tripID, gtfsLookupKey string, stopSequence
 					call.ExpectedDepartureTime = utils.Iso8601ExtendedFromUnixSeconds(staticDeparture)
 					call.DepartureStatus = "onTime"
 				}
+			} else if rtDeparture > 0 {
+				// No static time, but we have RT time - use it
+				call.ExpectedDepartureTime = utils.Iso8601ExtendedFromUnixSeconds(rtDeparture)
+				call.DepartureStatus = "onTime"
+			} else {
+				log.Printf("[ET] WARNING: trip %s stop %s has no departure time (neither RT nor static)", tripID, stopID)
+			}
+
+			estimatedCalls = append(estimatedCalls, call)
+		}
+	}
+
+	return recordedCalls, estimatedCalls
+}
+
+// buildCallSequenceFromRTOnly builds minimal call sequence using only GTFS-RT data
+// when static GTFS data is unavailable. This allows conversion to continue with
+// whatever real-time data we have.
+func (c *Converter) buildCallSequenceFromRTOnly(tripID string, now int64) ([]siri.RecordedCall, []siri.EstimatedCall) {
+	recordedCalls := []siri.RecordedCall{}
+	estimatedCalls := []siri.EstimatedCall{}
+	agencyID := c.opts.AgencyID
+	if agencyID == "" {
+		agencyID = "UNKNOWN"
+	}
+
+	// Get stop sequence from GTFS-RT stop_time_updates
+	rtStopSequence := c.gtfsrt.GetOnwardStopIDsForTrip(tripID)
+	if len(rtStopSequence) == 0 {
+		log.Printf("[ET] WARNING: trip %s has no stop_time_updates in GTFS-RT", tripID)
+		return recordedCalls, estimatedCalls
+	}
+
+	for order, stopID := range rtStopSequence {
+		// Get real-time arrival/departure times
+		rtArrival := c.gtfsrt.GetExpectedArrivalTimeAtStopForTrip(tripID, stopID)
+		rtDeparture := c.gtfsrt.GetExpectedDepartureTimeAtStopForTrip(tripID, stopID)
+
+		// Determine if this is a past or future stop
+		isPastStop := false
+		if rtDeparture > 0 && rtDeparture < now {
+			isPastStop = true
+		} else if rtArrival > 0 && rtArrival < now-60 { // Allow 60s grace period
+			isPastStop = true
+		}
+
+		// Format StopPointRef as {codespace}:Quay:{stop_id}, then apply field mutators
+		stopPointRef := applyFieldMutators(agencyID+":Quay:"+stopID, c.opts.FieldMutators.StopPointRef)
+
+		// Check if cancelled (schedule_relationship = 1 SKIPPED)
+		schedRel := c.gtfsrt.GetScheduleRelationshipForStop(tripID, stopID)
+		isCancelled := schedRel == 1
+
+		if isPastStop {
+			// siri.RecordedCall
+			call := siri.RecordedCall{
+				StopPointRef:  stopPointRef,
+				Order:         order + 1,
+				StopPointName: "", // No static data available
+				Cancellation:  isCancelled,
+				RequestStop:   false, // No static data available
+			}
+
+			// Set actual times from GTFS-RT (no aimed times without static data)
+			if rtArrival > 0 {
+				call.ActualArrivalTime = utils.Iso8601ExtendedFromUnixSeconds(rtArrival)
+			}
+			if rtDeparture > 0 {
+				call.ActualDepartureTime = utils.Iso8601ExtendedFromUnixSeconds(rtDeparture)
+			}
+
+			recordedCalls = append(recordedCalls, call)
+		} else {
+			// siri.EstimatedCall
+			call := siri.EstimatedCall{
+				StopPointRef:  stopPointRef,
+				Order:         order + 1,
+				StopPointName: "", // No static data available
+				Cancellation:  isCancelled,
+				RequestStop:   false, // No static data available
+			}
+
+			// Set expected times from GTFS-RT (no aimed times without static data)
+			if rtArrival > 0 {
+				call.ExpectedArrivalTime = utils.Iso8601ExtendedFromUnixSeconds(rtArrival)
+				// Without static schedule, we can't determine status
+				call.ArrivalStatus = "onTime"
+			}
+			if rtDeparture > 0 {
+				call.ExpectedDepartureTime = utils.Iso8601ExtendedFromUnixSeconds(rtDeparture)
+				// Without static schedule, we can't determine status
+				call.DepartureStatus = "onTime"
 			}
 
 			estimatedCalls = append(estimatedCalls, call)
