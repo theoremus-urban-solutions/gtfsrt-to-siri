@@ -13,10 +13,11 @@ import (
 // Converter coordinates GTFS, GTFS-RT, and options to produce SIRI responses.
 // This converter is data-source agnostic and config-free.
 type Converter struct {
-	gtfs   *gtfs.GTFSIndex
-	gtfsrt *gtfsrt.GTFSRTWrapper
-	opts   ConverterOptions
-	snap   *tracking.Snapshot
+	gtfs     *gtfs.GTFSIndex
+	gtfsrt   *gtfsrt.GTFSRTWrapper
+	opts     ConverterOptions
+	snap     *tracking.Snapshot
+	warnings *WarningAggregator
 }
 
 // NewConverter creates a new converter instance.
@@ -34,10 +35,11 @@ type Converter struct {
 func NewConverter(gtfsIdx *gtfs.GTFSIndex, rt *gtfsrt.GTFSRTWrapper, opts ConverterOptions) *Converter {
 	snap := tracking.NewSnapshot(gtfsIdx, rt, opts.AgencyID)
 	return &Converter{
-		gtfs:   gtfsIdx,
-		gtfsrt: rt,
-		opts:   opts,
-		snap:   snap,
+		gtfs:     gtfsIdx,
+		gtfsrt:   rt,
+		opts:     opts,
+		snap:     snap,
+		warnings: NewWarningAggregator(),
 	}
 }
 
@@ -64,6 +66,9 @@ func (c *Converter) GetCompleteVehicleMonitoringResponse() *siri.SiriResponse {
 		}
 		vm.VehicleActivity = append(vm.VehicleActivity, entry)
 	}
+
+	// Log consolidated warnings
+	c.warnings.LogAll("VP->VM", codespace)
 
 	// Use shared ServiceDelivery builder
 	sd := siri.VehicleAndSituation{

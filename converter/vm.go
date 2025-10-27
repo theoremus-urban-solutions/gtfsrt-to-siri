@@ -1,7 +1,6 @@
 package converter
 
 import (
-	"log"
 	"math"
 
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/gtfsrt"
@@ -19,7 +18,7 @@ func (c *Converter) buildMVJ(tripID string) siri.MonitoredVehicleJourney {
 	if routeID == "" {
 		routeID = c.gtfs.GetRouteIDForTrip(tripID)
 		if routeID == "" {
-			log.Printf("[VM] WARNING: trip %s has no route_id in GTFS-RT or static GTFS, using 'UNKNOWN'", tripID)
+			c.warnings.Add(WarningNoRouteID, tripID)
 			routeID = "UNKNOWN"
 		}
 	}
@@ -41,7 +40,7 @@ func (c *Converter) buildMVJ(tripID string) siri.MonitoredVehicleJourney {
 	}
 	originName := c.gtfs.GetStopName(originStopID)
 	if originStopID != "" && originName == "" {
-		log.Printf("[VM] WARNING: trip %s origin stop %s has no name in static GTFS", tripID, originStopID)
+		c.warnings.Add(WarningOriginStopNoName, tripID)
 	}
 
 	destStopID := c.gtfs.GetDestinationStopIDForTrip(tripID)
@@ -56,7 +55,7 @@ func (c *Converter) buildMVJ(tripID string) siri.MonitoredVehicleJourney {
 	pub := c.gtfs.GetRouteShortName(routeID)
 	if pub == "" && routeID != "" && routeID != "UNKNOWN" {
 		pub = routeID // Use route_id as fallback
-		log.Printf("[VM] WARNING: trip %s route %s has no route_short_name, using route_id", tripID, routeID)
+		c.warnings.Add(WarningNoRouteShortName, tripID)
 	}
 
 	// VehicleRef format: {codespace}:VehicleRef:{vehicle_id}
@@ -92,7 +91,7 @@ func (c *Converter) buildMVJ(tripID string) siri.MonitoredVehicleJourney {
 	}
 	// Log warning if still no position data
 	if latPtr == nil || lonPtr == nil {
-		log.Printf("[VM] WARNING: trip %s has no lat/lon in GTFS-RT or snapshot", tripID)
+		c.warnings.Add(WarningNoLatLon, tripID)
 	}
 
 	// siri.FramedVehicleJourneyRef with DataFrameRef (YYYY-MM-DD) and DatedVehicleJourneyRef ({codespace}:ServiceJourney:{tripID})
@@ -297,7 +296,7 @@ func (c *Converter) mapCongestionLevel(tripID string) *bool {
 func (c *Converter) buildMonitoredCall(tripID string) *siri.MonitoredCall {
 	stops := c.gtfsrt.GetOnwardStopIDsForTrip(tripID)
 	if len(stops) == 0 {
-		log.Printf("[VM] WARNING: trip %s has no onward stops in GTFS-RT", tripID)
+		c.warnings.Add(WarningNoOnwardStops, tripID)
 		return nil
 	}
 
@@ -317,7 +316,7 @@ func (c *Converter) buildMonitoredCall(tripID string) *siri.MonitoredCall {
 
 	stopName := c.gtfs.GetStopName(currentStopID)
 	if stopName == "" {
-		log.Printf("[VM] WARNING: trip %s monitored call stop %s has no name in static GTFS", tripID, currentStopID)
+		c.warnings.Add(WarningMonitoredCallStopNoName, tripID)
 	}
 
 	// Get stop order/sequence from GTFS static
