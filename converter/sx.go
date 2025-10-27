@@ -37,7 +37,7 @@ func (c *Converter) BuildSituationExchange() siri.SituationExchange {
 		}
 		// Log if no summary available
 		if len(summaries) == 0 {
-			log.Printf("[SX] WARNING: alert %s has no header_text/summary", a.ID)
+			c.warnings.Add(WarningNoSummary, a.ID)
 		}
 
 		// Build localized descriptions
@@ -58,7 +58,7 @@ func (c *Converter) BuildSituationExchange() siri.SituationExchange {
 		}
 		// Log if no description available
 		if len(descriptions) == 0 {
-			log.Printf("[SX] WARNING: alert %s has no description_text", a.ID)
+			c.warnings.Add(WarningNoDescription, a.ID)
 		}
 
 		// Build InfoLinks from URLs
@@ -114,7 +114,7 @@ func (c *Converter) BuildSituationExchange() siri.SituationExchange {
 			if rid == "" {
 				rid = c.gtfs.GetRouteIDForTrip(tid)
 				if rid == "" {
-					log.Printf("[SX] WARNING: alert %s trip %s has no route_id in GTFS-RT or static GTFS", a.ID, tid)
+					c.warnings.Add(WarningNoRouteID, tid)
 				}
 			}
 			if rid != "" {
@@ -144,7 +144,7 @@ func (c *Converter) BuildSituationExchange() siri.SituationExchange {
 		for _, sid := range a.StopIDs {
 			// Check if stop exists in static GTFS
 			if stopName := c.gtfs.GetStopName(sid); stopName == "" {
-				log.Printf("[SX] WARNING: alert %s stop %s not found in static GTFS", a.ID, sid)
+				c.warnings.Add(WarningStopNotFound, sid)
 			}
 			el.Affects.StopPoints = append(el.Affects.StopPoints, siri.AffectedStopPoint{
 				StopPointRef: applyFieldMutators(sid, c.opts.FieldMutators.StopPointRef),
@@ -161,6 +161,14 @@ func (c *Converter) BuildSituationExchange() siri.SituationExchange {
 		}
 		elements = append(elements, el)
 	}
+
+	// Log consolidated warnings
+	codespace := c.opts.AgencyID
+	if codespace == "" {
+		codespace = "UNKNOWN"
+	}
+	c.warnings.LogAll("Alerts->SX", codespace)
+
 	return siri.SituationExchange{Situations: elements}
 }
 

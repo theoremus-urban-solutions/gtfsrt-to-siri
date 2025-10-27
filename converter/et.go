@@ -2,7 +2,6 @@ package converter
 
 import (
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/siri"
@@ -34,6 +33,9 @@ func (c *Converter) BuildEstimatedTimetable() siri.EstimatedTimetable {
 		EstimatedVehicleJourney: journeys,
 	}
 
+	// Log consolidated warnings
+	c.warnings.LogAll("TU->ET", agencyID)
+
 	return siri.EstimatedTimetable{
 		ResponseTimestamp:            utils.Iso8601ExtendedFromUnixSeconds(timestamp),
 		EstimatedJourneyVersionFrame: []siri.EstimatedJourneyVersionFrame{frame},
@@ -48,7 +50,7 @@ func (c *Converter) buildEstimatedVehicleJourney(tripID string, now int64, agenc
 		// Try to get from static GTFS trips.txt using plain trip_id
 		routeID = c.gtfs.GetRouteIDForTrip(tripID)
 		if routeID == "" {
-			log.Printf("[ET] WARNING: trip %s has no route_id in GTFS-RT or static GTFS, using 'UNKNOWN'", tripID)
+			c.warnings.Add(WarningNoRouteID, tripID)
 			routeID = "UNKNOWN"
 		}
 	}
@@ -65,7 +67,7 @@ func (c *Converter) buildEstimatedVehicleJourney(tripID string, now int64, agenc
 	dataFrameRef := startDate
 	if dataFrameRef == "" {
 		dataFrameRef = utils.Iso8601DateFromUnixSeconds(now)
-		log.Printf("[ET] WARNING: trip %s has no start_date, using current date", tripID)
+		c.warnings.Add(WarningNoStartDate, tripID)
 	}
 	datedVehicleJourneyRef := agencyID + ":ServiceJourney:" + tripID
 
@@ -83,7 +85,7 @@ func (c *Converter) buildEstimatedVehicleJourney(tripID string, now int64, agenc
 
 	if len(stopSequence) == 0 {
 		// Trip exists in GTFS-RT but not in GTFS static - build calls from RT only
-		log.Printf("[ET] WARNING: trip %s not found in static GTFS, building minimal calls from GTFS-RT only", tripID)
+		c.warnings.Add(WarningTripNotInStatic, tripID)
 		recordedCalls, estimatedCalls = c.buildCallSequenceFromRTOnly(tripID, now)
 	} else {
 		// Split into siri.RecordedCalls and siri.EstimatedCalls (always use plain tripID for static GTFS)
@@ -95,7 +97,7 @@ func (c *Converter) buildEstimatedVehicleJourney(tripID string, now int64, agenc
 	if routeType := c.gtfs.GetRouteType(routeID); routeType > 0 {
 		vehicleMode = mapGTFSRouteTypeToSIRIVehicleMode(routeType)
 	} else if routeID != "UNKNOWN" {
-		log.Printf("[ET] WARNING: trip %s route %s has no route_type in static GTFS", tripID, routeID)
+		c.warnings.Add(WarningNoRouteType, tripID+":"+routeID)
 	}
 
 	// Get Origin and Destination names from first/last stop in calls
@@ -105,10 +107,10 @@ func (c *Converter) buildEstimatedVehicleJourney(tripID string, now int64, agenc
 		originName = c.gtfs.GetStopName(stopSequence[0])
 		destinationName = c.gtfs.GetStopName(stopSequence[len(stopSequence)-1])
 		if originName == "" {
-			log.Printf("[ET] WARNING: trip %s origin stop %s has no name in static GTFS", tripID, stopSequence[0])
+			c.warnings.Add(WarningOriginStopNoName, tripID)
 		}
 		if destinationName == "" {
-			log.Printf("[ET] WARNING: trip %s destination stop %s has no name in static GTFS", tripID, stopSequence[len(stopSequence)-1])
+			c.warnings.Add(WarningDestStopNoName, tripID)
 		}
 	}
 
@@ -172,7 +174,7 @@ func (c *Converter) buildCallSequence(tripID, gtfsLookupKey string, stopSequence
 
 		// Log warnings for missing static times
 		if staticArrivalStr == "" && staticDepartureStr == "" {
-			log.Printf("[ET] WARNING: trip %s stop %s has no static times in GTFS", tripID, stopID)
+			c.warnings.Add(WarningNoStaticTimes, tripID+":"+stopID)
 		}
 
 		// Determine if this is a past or future stop
@@ -186,7 +188,7 @@ func (c *Converter) buildCallSequence(tripID, gtfsLookupKey string, stopSequence
 		// Get stop name
 		stopName := c.gtfs.GetStopName(stopID)
 		if stopName == "" {
-			log.Printf("[ET] WARNING: trip %s stop %s has no name in static GTFS", tripID, stopID)
+			c.warnings.Add(WarningStopNoName, tripID+":"+stopID)
 		}
 
 		// Format StopPointRef as {codespace}:Quay:{stop_id}, then apply field mutators
@@ -223,12 +225,12 @@ func (c *Converter) buildCallSequence(tripID, gtfsLookupKey string, stopSequence
 			if rtArrival > 0 {
 				call.ActualArrivalTime = utils.Iso8601ExtendedFromUnixSeconds(rtArrival)
 			} else if staticArrival == 0 {
-				log.Printf("[ET] WARNING: trip %s stop %s has no arrival time (neither RT nor static)", tripID, stopID)
+				c.warnings.Add(WarningNoArrivalTime, tripID+":"+stopID)
 			}
 			if rtDeparture > 0 {
 				call.ActualDepartureTime = utils.Iso8601ExtendedFromUnixSeconds(rtDeparture)
 			} else if staticDeparture == 0 {
-				log.Printf("[ET] WARNING: trip %s stop %s has no departure time (neither RT nor static)", tripID, stopID)
+				c.warnings.Add(WarningNoDepartureTime, tripID+":"+stopID)
 			}
 
 			recordedCalls = append(recordedCalls, call)
@@ -265,7 +267,7 @@ func (c *Converter) buildCallSequence(tripID, gtfsLookupKey string, stopSequence
 				call.ExpectedArrivalTime = utils.Iso8601ExtendedFromUnixSeconds(rtArrival)
 				call.ArrivalStatus = "onTime"
 			} else {
-				log.Printf("[ET] WARNING: trip %s stop %s has no arrival time (neither RT nor static)", tripID, stopID)
+				c.warnings.Add(WarningNoArrivalTime, tripID+":"+stopID)
 			}
 
 			if staticDeparture > 0 {
@@ -282,7 +284,7 @@ func (c *Converter) buildCallSequence(tripID, gtfsLookupKey string, stopSequence
 				call.ExpectedDepartureTime = utils.Iso8601ExtendedFromUnixSeconds(rtDeparture)
 				call.DepartureStatus = "onTime"
 			} else {
-				log.Printf("[ET] WARNING: trip %s stop %s has no departure time (neither RT nor static)", tripID, stopID)
+				c.warnings.Add(WarningNoDepartureTime, tripID+":"+stopID)
 			}
 
 			estimatedCalls = append(estimatedCalls, call)
@@ -306,7 +308,7 @@ func (c *Converter) buildCallSequenceFromRTOnly(tripID string, now int64) ([]sir
 	// Get stop sequence from GTFS-RT stop_time_updates
 	rtStopSequence := c.gtfsrt.GetOnwardStopIDsForTrip(tripID)
 	if len(rtStopSequence) == 0 {
-		log.Printf("[ET] WARNING: trip %s has no stop_time_updates in GTFS-RT", tripID)
+		c.warnings.Add(WarningNoStopTimeUpdates, tripID)
 		return recordedCalls, estimatedCalls
 	}
 
