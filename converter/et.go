@@ -9,7 +9,7 @@ import (
 )
 
 // BuildEstimatedTimetable converts GTFS-RT data to SIRI ET format
-func (c *Converter) BuildEstimatedTimetable() siri.EstimatedTimetable {
+func (c *Converter) BuildEstimatedTimetable() siri.EstimatedTimetableDelivery {
 	timestamp := c.gtfsrt.GetTimestampForFeedMessage()
 	now := timestamp
 	agencyID := c.opts.AgencyID
@@ -36,7 +36,8 @@ func (c *Converter) BuildEstimatedTimetable() siri.EstimatedTimetable {
 	// Log consolidated warnings
 	c.warnings.LogAll("TU->ET", agencyID)
 
-	return siri.EstimatedTimetable{
+	return siri.EstimatedTimetableDelivery{
+		Version:                      "2.0",
 		ResponseTimestamp:            utils.Iso8601ExtendedFromUnixSeconds(timestamp),
 		EstimatedJourneyVersionFrame: []siri.EstimatedJourneyVersionFrame{frame},
 	}

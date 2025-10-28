@@ -155,9 +155,12 @@ func TestFormatter_ET_ToXML(t *testing.T) {
 		t.Error("XML should contain <Siri> root element")
 	}
 
-	// Check for EstimatedTimetableDelivery
-	if !strings.Contains(xmlStr, "<EstimatedTimetableDelivery>") {
+	// Check for EstimatedTimetableDelivery (with version attribute)
+	if !strings.Contains(xmlStr, "<EstimatedTimetableDelivery") {
 		t.Error("XML should contain <EstimatedTimetableDelivery>")
+	}
+	if !strings.Contains(xmlStr, "version=\"2.0\"") {
+		t.Error("XML should contain version=\"2.0\" attribute")
 	}
 
 	t.Logf("✓ Valid ET XML output (%d bytes)", len(xmlBytes))

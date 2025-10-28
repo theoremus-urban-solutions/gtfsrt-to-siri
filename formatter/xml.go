@@ -252,8 +252,14 @@ func writeMVJXML(b *strings.Builder, mvj siri.MonitoredVehicleJourney) {
 	b.WriteString("</MonitoredVehicleJourney>")
 }
 
-func writeEstimatedTimetableXML(b *strings.Builder, et siri.EstimatedTimetable) {
-	b.WriteString("<EstimatedTimetableDelivery>")
+func writeEstimatedTimetableXML(b *strings.Builder, et siri.EstimatedTimetableDelivery) {
+	b.WriteString("<EstimatedTimetableDelivery")
+	if et.Version != "" {
+		b.WriteString(" version=\"")
+		b.WriteString(xmlEscape(et.Version))
+		b.WriteString("\"")
+	}
+	b.WriteString(">")
 	if et.ResponseTimestamp != "" {
 		b.WriteString("<ResponseTimestamp>")
 		b.WriteString(xmlEscape(et.ResponseTimestamp))

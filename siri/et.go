@@ -1,39 +1,42 @@
 package siri
 
-// EstimatedTimetable delivery types
-type EstimatedTimetable struct {
-	ResponseTimestamp            string                         `json:"ResponseTimestamp"`
-	EstimatedJourneyVersionFrame []EstimatedJourneyVersionFrame `json:"EstimatedJourneyVersionFrame"`
+// EstimatedTimetableDelivery represents a delivery of estimated timetable data
+// According to SIRI-ET specification v1.1 (Entur Nordic Profile)
+type EstimatedTimetableDelivery struct {
+	Version                      string                         `json:"version" xml:"version,attr"`
+	ResponseTimestamp            string                         `json:"ResponseTimestamp" xml:"ResponseTimestamp"`
+	EstimatedJourneyVersionFrame []EstimatedJourneyVersionFrame `json:"EstimatedJourneyVersionFrame" xml:"EstimatedJourneyVersionFrame"`
 }
 
-// EstimatedJourneyVersionFrame contains a frame of estimated journeys
+// EstimatedJourneyVersionFrame contains a frame of estimated journeys with a timestamp
 type EstimatedJourneyVersionFrame struct {
-	RecordedAtTime          string                    `json:"RecordedAtTime"`
-	EstimatedVehicleJourney []EstimatedVehicleJourney `json:"EstimatedVehicleJourney"`
+	RecordedAtTime          string                    `json:"RecordedAtTime" xml:"RecordedAtTime"`
+	EstimatedVehicleJourney []EstimatedVehicleJourney `json:"EstimatedVehicleJourney" xml:"EstimatedVehicleJourney"`
 }
 
 // EstimatedVehicleJourney represents a single journey with estimated times
+// Contains continuously updated timetable data with changes for the current operating day
 type EstimatedVehicleJourney struct {
-	RecordedAtTime          string                  `json:"RecordedAtTime"`
-	LineRef                 string                  `json:"LineRef"`
-	VehicleRef              string                  `json:"VehicleRef,omitempty"`
-	DirectionRef            string                  `json:"DirectionRef"`
-	FramedVehicleJourneyRef FramedVehicleJourneyRef `json:"FramedVehicleJourneyRef"`
-	VehicleMode             string                  `json:"VehicleMode,omitempty"`
-	OriginName              string                  `json:"OriginName,omitempty"`
-	DestinationName         string                  `json:"DestinationName,omitempty"`
-	Monitored               bool                    `json:"Monitored"`
-	DataSource              string                  `json:"DataSource,omitempty"`
-	OperatorRef             string                  `json:"OperatorRef,omitempty"`
-	RecordedCalls           []RecordedCall          `json:"RecordedCalls,omitempty"`
-	EstimatedCalls          []EstimatedCall         `json:"EstimatedCalls,omitempty"`
-	IsCompleteStopSequence  bool                    `json:"IsCompleteStopSequence"`
+	RecordedAtTime          string                  `json:"RecordedAtTime" xml:"RecordedAtTime"`
+	LineRef                 string                  `json:"LineRef" xml:"LineRef"`
+	DirectionRef            string                  `json:"DirectionRef" xml:"DirectionRef"`
+	FramedVehicleJourneyRef FramedVehicleJourneyRef `json:"FramedVehicleJourneyRef" xml:"FramedVehicleJourneyRef"`
+	VehicleRef              string                  `json:"VehicleRef,omitempty" xml:"VehicleRef,omitempty"`
+	VehicleMode             string                  `json:"VehicleMode,omitempty" xml:"VehicleMode,omitempty"`
+	OriginName              string                  `json:"OriginName,omitempty" xml:"OriginName,omitempty"`
+	DestinationName         string                  `json:"DestinationName,omitempty" xml:"DestinationName,omitempty"`
+	Monitored               bool                    `json:"Monitored" xml:"Monitored"`
+	DataSource              string                  `json:"DataSource,omitempty" xml:"DataSource,omitempty"`
+	OperatorRef             string                  `json:"OperatorRef,omitempty" xml:"OperatorRef,omitempty"`
+	RecordedCalls           []RecordedCall          `json:"RecordedCalls,omitempty" xml:"RecordedCalls>RecordedCall,omitempty"`
+	EstimatedCalls          []EstimatedCall         `json:"EstimatedCalls,omitempty" xml:"EstimatedCalls>EstimatedCall,omitempty"`
+	IsCompleteStopSequence  bool                    `json:"IsCompleteStopSequence" xml:"IsCompleteStopSequence"`
 }
 
-// FramedVehicleJourneyRef uniquely identifies a vehicle journey
+// FramedVehicleJourneyRef uniquely identifies a vehicle journey within a data frame
 type FramedVehicleJourneyRef struct {
-	DataFrameRef           string `json:"DataFrameRef"`
-	DatedVehicleJourneyRef string `json:"DatedVehicleJourneyRef"`
+	DataFrameRef           string `json:"DataFrameRef" xml:"DataFrameRef"`
+	DatedVehicleJourneyRef string `json:"DatedVehicleJourneyRef" xml:"DatedVehicleJourneyRef"`
 }
 
 // RecordedCall represents a stop that has already been visited

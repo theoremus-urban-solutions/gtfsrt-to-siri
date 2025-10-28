@@ -12,9 +12,9 @@ type SiriServiceDelivery struct {
 
 // VehicleAndSituation contains all SIRI delivery types
 type VehicleAndSituation struct {
-	ResponseTimestamp          string               `json:"ResponseTimestamp"`
-	ProducerRef                string               `json:"ProducerRef,omitempty"`
-	VehicleMonitoringDelivery  []VehicleMonitoring  `json:"VehicleMonitoringDelivery"`
-	SituationExchangeDelivery  []SituationExchange  `json:"SituationExchangeDelivery"`
-	EstimatedTimetableDelivery []EstimatedTimetable `json:"EstimatedTimetableDelivery"`
+	ResponseTimestamp          string                       `json:"ResponseTimestamp"`
+	ProducerRef                string                       `json:"ProducerRef,omitempty"`
+	VehicleMonitoringDelivery  []VehicleMonitoring          `json:"VehicleMonitoringDelivery"`
+	SituationExchangeDelivery  []SituationExchange          `json:"SituationExchangeDelivery"`
+	EstimatedTimetableDelivery []EstimatedTimetableDelivery `json:"EstimatedTimetableDelivery"`
 }
