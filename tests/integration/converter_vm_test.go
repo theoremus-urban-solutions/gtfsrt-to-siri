@@ -23,7 +23,11 @@ func TestConverter_VehicleMonitoring_RealData(t *testing.T) {
 		t.Fatal("VM result should not be nil")
 	}
 
-	if len(result.VehicleMonitoringDelivery) == 0 || len(result.VehicleMonitoringDelivery[0].VehicleActivity) == 0 {
+	if len(result.VehicleMonitoringDelivery) == 0 {
+		t.Fatal("Should have at least one vehicle monitoring delivery")
+	}
+
+	if len(result.VehicleMonitoringDelivery[0].VehicleActivity) == 0 {
 		t.Fatal("Should have at least one vehicle activity")
 	}
 
@@ -219,7 +223,11 @@ func TestConverter_VM_Velocity(t *testing.T) {
 		t.Fatal("VM result should not be nil")
 	}
 
-	if len(result.VehicleMonitoringDelivery) == 0 || len(result.VehicleMonitoringDelivery[0].VehicleActivity) == 0 {
+	if len(result.VehicleMonitoringDelivery) == 0 {
+		t.Skip("No vehicle monitoring deliveries in test data")
+	}
+
+	if len(result.VehicleMonitoringDelivery[0].VehicleActivity) == 0 {
 		t.Skip("No vehicle activities in test data")
 	}
 

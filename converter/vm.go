@@ -51,13 +51,6 @@ func (c *Converter) buildMVJ(tripID string) siri.MonitoredVehicleJourney {
 	}
 	head := c.gtfs.GetTripHeadsign(tripID)
 
-	// PublishedLineName: try route_short_name, fallback to route_id
-	pub := c.gtfs.GetRouteShortName(routeID)
-	if pub == "" && routeID != "" && routeID != "UNKNOWN" {
-		pub = routeID // Use route_id as fallback
-		c.warnings.Add(WarningNoRouteShortName, tripID)
-	}
-
 	// VehicleRef format: {codespace}:VehicleRef:{vehicle_id}
 	vehRef := ""
 	if rawVehicleID := c.gtfsrt.GetVehicleRefForTrip(tripID); rawVehicleID != "" {
@@ -141,9 +134,12 @@ func (c *Converter) buildMVJ(tripID string) siri.MonitoredVehicleJourney {
 		DataFrameRef:           dataFrameRef,
 		DatedVehicleJourneyRef: datedVehicleJourneyRef,
 	}
-	vehicleLocation := &siri.Location{
-		Longitude: *lonPtr,
-		Latitude:  *latPtr,
+	var vehicleLocation *siri.Location
+	if latPtr != nil && lonPtr != nil {
+		vehicleLocation = &siri.Location{
+			Longitude: *lonPtr,
+			Latitude:  *latPtr,
+		}
 	}
 
 	return siri.MonitoredVehicleJourney{

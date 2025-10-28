@@ -173,20 +173,30 @@ func (c *Converter) BuildSituationExchange() siri.SituationExchangeDelivery {
 		}
 
 		// Build StopPoints for stop-only alerts
-		var stopPoints []siri.AffectedStopPoint
-		for _, sid := range a.StopIDs {
-			// Check if stop exists in static GTFS
-			if stopName := c.gtfs.GetStopName(sid); stopName == "" {
-				c.warnings.Add(WarningStopNotFound, sid)
+		if len(a.StopIDs) > 0 {
+			var stopPoints []siri.AffectedStopPoint
+			for _, sid := range a.StopIDs {
+				// Check if stop exists in static GTFS
+				if stopName := c.gtfs.GetStopName(sid); stopName == "" {
+					c.warnings.Add(WarningStopNotFound, sid)
+				}
+				stopPoints = append(stopPoints, siri.AffectedStopPoint{
+					StopPointRef: applyFieldMutators(sid, c.opts.FieldMutators.StopPointRef),
+				})
 			}
-			stopPoints = append(stopPoints, siri.AffectedStopPoint{
-				StopPointRef: applyFieldMutators(sid, c.opts.FieldMutators.StopPointRef),
-			})
+			affects.StopPoints = &siri.AffectedStopPoints{
+				AffectedStopPoint: stopPoints,
+			}
 		}
 
 		// Log if alert has no informed entities (system-wide alert)
 		if len(a.TripIDs) == 0 && len(a.RouteIDs) == 0 && len(a.StopIDs) == 0 {
 			log.Printf("[SX] INFO: alert %s has no informed entities (system-wide alert)", a.ID)
+		}
+
+		// Set affects if any entities were added
+		if affects.VehicleJourneys != nil || affects.Networks != nil || affects.StopPoints != nil {
+			el.Affects = affects
 		}
 		// Add siri.Consequences derived from GTFS-RT Effect
 		if cond := effectToCondition(a.Effect); cond != "" {
