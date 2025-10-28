@@ -7,7 +7,6 @@ import (
 	gtfsrtpb "github.com/MobilityData/gtfs-realtime-bindings/golang/gtfs"
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/converter"
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/gtfsrt"
-	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/siri"
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/tests/helpers"
 	"google.golang.org/protobuf/proto"
 )
@@ -19,7 +18,7 @@ func TestVM_EntryCount(t *testing.T) {
 	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip", "SOFIA")
 
 	// Count input VehiclePositions
-	vpData, err := helpers.LoadProtobufFile("testdata/gtfsrt/vehicle-positions.pbf")
+	vpData, err := helpers.LoadProtobufFile("vehicle-positions.pbf")
 	if err != nil {
 		t.Fatalf("Failed to load vehicle positions: %v", err)
 	}
@@ -52,12 +51,12 @@ func TestVM_EntryCount(t *testing.T) {
 		t.Fatal("VM result should not be nil")
 	}
 
-	vm := result.Siri.ServiceDelivery.VehicleMonitoringDelivery
-	if len(vm) == 0 {
+	if len(result.VehicleMonitoringDelivery) == 0 {
 		t.Fatal("Should have at least one VehicleMonitoringDelivery")
 	}
 
-	outputCount := len(vm[0].VehicleActivity)
+	delivery := result.VehicleMonitoringDelivery[0]
+	outputCount := len(delivery.VehicleActivity)
 
 	// Verify counts match
 	if outputCount != inputCount {
@@ -75,7 +74,7 @@ func TestET_EntryCount(t *testing.T) {
 	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip", "SOFIA")
 
 	// Count input TripUpdates
-	tuData, err := helpers.LoadProtobufFile("testdata/gtfsrt/trip-updates.pbf")
+	tuData, err := helpers.LoadProtobufFile("trip-updates.pbf")
 	if err != nil {
 		t.Fatalf("Failed to load trip updates: %v", err)
 	}
@@ -139,7 +138,7 @@ func TestSX_EntryCount(t *testing.T) {
 	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip", "SOFIA")
 
 	// Count input Alerts
-	saData, err := helpers.LoadProtobufFile("testdata/gtfsrt/alerts.pbf")
+	saData, err := helpers.LoadProtobufFile("alerts.pbf")
 	if err != nil {
 		t.Fatalf("Failed to load service alerts: %v", err)
 	}
@@ -168,12 +167,7 @@ func TestSX_EntryCount(t *testing.T) {
 	c := converter.NewConverter(gtfsIndex, gtfsrtData, opts)
 	result := c.BuildSituationExchange()
 
-	situations, ok := result.Situations.([]siri.PtSituationElement)
-	if !ok {
-		t.Fatalf("Expected []siri.PtSituationElement in Situations field, got %T", result.Situations)
-	}
-
-	outputCount := len(situations)
+	outputCount := len(result.Situations)
 
 	// Verify counts match
 	if outputCount != inputCount {

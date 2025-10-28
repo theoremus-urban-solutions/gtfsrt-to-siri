@@ -2,13 +2,13 @@ server:
   port: 16181
 
 gtfs:
-  staticURL: https://gtfs-realtime-sofia.theoremus.com/api/v1/static
+  staticURL: testdata/gtfs/sofia-static.zip
   agency_id: SOFIA
 
 gtfsrt:
-  tripUpdatesURL: https://gtfs-realtime-sofia.theoremus.com/api/v1/trip-updates
-  vehiclePositionsURL: https://gtfs-realtime-sofia.theoremus.com/api/v1/vehicle-positions
-  serviceAlertsURL: https://gtfs-realtime-sofia.theoremus.com/api/v1/alerts
+  tripUpdatesURL: pbf-input/trip-updates-golden.pbf
+  vehiclePositionsURL: pbf-input/vehicle-positions-golden.pbf
+  serviceAlertsURL: pbf-input/alerts-golden.pbf
   readIntervalMS: 30000
   timeoutMS: 5000
 

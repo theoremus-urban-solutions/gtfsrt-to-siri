@@ -4,11 +4,10 @@ import (
 	"testing"
 
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/converter"
-	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/siri"
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/tests/helpers"
 )
 
-// Test SituationExchange conversion
+// Test SituationExchangeDelivery conversion
 func TestConverter_SituationExchange_Basic(t *testing.T) {
 	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip", "SOFIA")
 	gtfsrtData := helpers.LoadGTFSRTFromLocal(t)
@@ -18,16 +17,10 @@ func TestConverter_SituationExchange_Basic(t *testing.T) {
 
 	result := c.BuildSituationExchange()
 
-	// Extract situations from the any type
-	situations, ok := result.Situations.([]siri.PtSituationElement)
-	if !ok {
-		t.Fatal("Situations should be []PtSituationElement")
-	}
-
 	// Alerts may be empty if no service alerts in feed
-	t.Logf("Found %d situation elements (alerts)", len(situations))
+	t.Logf("Found %d situation elements (alerts)", len(result.Situations))
 
-	if len(situations) > 0 {
+	if len(result.Situations) > 0 {
 		t.Logf("✓ Alerts present in feed")
 	} else {
 		t.Log("No alerts in current Sofia feed (this is normal)")
@@ -44,28 +37,23 @@ func TestConverter_SX_AlertStructure(t *testing.T) {
 
 	result := c.BuildSituationExchange()
 
-	situations, ok := result.Situations.([]siri.PtSituationElement)
-	if !ok {
-		t.Fatal("Situations should be []PtSituationElement")
-	}
-
-	if len(situations) == 0 {
+	if len(result.Situations) == 0 {
 		t.Skip("No alerts in feed to test structure")
 	}
 
-	alert := situations[0]
+	alert := result.Situations[0]
 
 	if alert.SituationNumber == "" {
 		t.Error("Alert should have SituationNumber")
 	}
 
-	if len(alert.Summaries) == 0 && len(alert.Descriptions) == 0 {
-		t.Error("Alert should have either Summaries or Descriptions")
+	if len(alert.Summary) == 0 && len(alert.Description) == 0 {
+		t.Error("Alert should have either Summary or Description")
 	}
 
 	summaryText := ""
-	if len(alert.Summaries) > 0 {
-		summaryText = alert.Summaries[0].Text
+	if len(alert.Summary) > 0 {
+		summaryText = alert.Summary[0].Text
 	}
 	t.Logf("Alert: %s - %s", alert.SituationNumber, summaryText)
 }
@@ -80,19 +68,14 @@ func TestConverter_SX_AffectedEntities(t *testing.T) {
 
 	result := c.BuildSituationExchange()
 
-	situations, ok := result.Situations.([]siri.PtSituationElement)
-	if !ok {
-		t.Fatal("Situations should be []PtSituationElement")
-	}
-
-	if len(situations) == 0 {
+	if len(result.Situations) == 0 {
 		t.Skip("No alerts in feed to test affected entities")
 	}
 
-	for _, alert := range situations {
+	for _, alert := range result.Situations {
 		// Check if we have affected networks/lines/stops
-		if len(alert.Affects.Networks) > 0 {
-			t.Logf("Alert affects %d networks", len(alert.Affects.Networks))
+		if alert.Affects != nil && alert.Affects.Networks != nil {
+			t.Logf("Alert affects %d networks", len(alert.Affects.Networks.AffectedNetwork))
 		}
 		// Can add more affected entity checks here
 	}
@@ -108,19 +91,16 @@ func TestConverter_SX_MetadataFields(t *testing.T) {
 
 	result := c.BuildSituationExchange()
 
-	situations, ok := result.Situations.([]siri.PtSituationElement)
-	if !ok {
-		t.Fatal("Situations should be []PtSituationElement")
-	}
-
-	if len(situations) == 0 {
+	if len(result.Situations) == 0 {
 		t.Skip("No alerts in feed to test metadata")
 	}
 
-	alert := situations[0]
+	alert := result.Situations[0]
 
 	// These fields may be optional depending on the feed
 	t.Logf("Alert severity: %s", alert.Severity)
-	t.Logf("Alert publication window: Start=%s, End=%s",
-		alert.PublicationWindow.StartTime, alert.PublicationWindow.EndTime)
+	if len(alert.ValidityPeriod) > 0 {
+		t.Logf("Alert validity period: Start=%s, End=%s",
+			alert.ValidityPeriod[0].StartTime, alert.ValidityPeriod[0].EndTime)
+	}
 }

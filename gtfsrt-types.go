@@ -222,7 +222,14 @@ func TripKeyForConverter(tripID, agency, startDate string) string {
 }
 
 // translatedStringToText extracts best-effort text from GTFS-RT TranslatedString
-// Prefers entries with no language tag, or returns first available
+// Translation represents a single language translation
+type Translation struct {
+	Language string
+	Text     string
+}
+
+// translatedStringToText prefers entries with no language tag, or returns first available
+// Currently unused but kept for future multi-language support
 func translatedStringToText(translations []Translation) string {
 	if len(translations) == 0 {
 		return ""
@@ -239,13 +246,8 @@ func translatedStringToText(translations []Translation) string {
 	return first
 }
 
-// Translation represents a single language translation
-type Translation struct {
-	Language string
-	Text     string
-}
-
 // translatedStringToMap extracts all translations as language -> text map
+// Currently unused but kept for future multi-language support
 func translatedStringToMap(translations []Translation) map[string]string {
 	result := make(map[string]string)
 	for _, tr := range translations {
@@ -257,4 +259,8 @@ func translatedStringToMap(translations []Translation) map[string]string {
 	}
 	return result
 }
+
+// Suppress unused warnings - these functions are kept for future use
+var _ = translatedStringToText
+var _ = translatedStringToMap
 
