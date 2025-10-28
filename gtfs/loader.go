@@ -64,21 +64,21 @@ func NewGTFSIndexFromReader(r io.ReaderAt, size int64, agencyID string) (*GTFSIn
 
 	// Initialize index
 	index := &GTFSIndex{
-		agencyID:        agencyID,
-		routeShortNames: map[string]string{},
-		routeTypes:      map[string]int{},
-		routes:          map[string]struct{}{},
-		tripToRoute:     map[string]string{},
-		tripHeadsign:    map[string]string{},
-		tripOriginStop:  map[string]string{},
-		tripDestStop:    map[string]string{},
-		tripDirection:   map[string]string{},
-		tripBlockID:     map[string]string{},
+		AgencyID:        agencyID,
+		RouteShortNames: map[string]string{},
+		RouteTypes:      map[string]int{},
+		Routes:          map[string]struct{}{},
+		TripToRoute:     map[string]string{},
+		TripHeadsign:    map[string]string{},
+		TripOriginStop:  map[string]string{},
+		TripDestStop:    map[string]string{},
+		TripDirection:   map[string]string{},
+		TripBlockID:     map[string]string{},
 		TripStopSeq:     map[string][]string{},
-		tripStopIdx:     map[string]map[string]int{},
-		stopNames:       map[string]string{},
+		TripStopIdx:     map[string]map[string]int{},
+		StopNames:       map[string]string{},
 		StopCoord:       map[string][2]float64{},
-		stopTimes:       map[string]map[string]StopTime{},
+		StopTimes:       map[string]map[string]StopTime{},
 	}
 
 	// Parse GTFS files from zip
@@ -141,11 +141,11 @@ func (g *GTFSIndex) consumeCSV(f *zip.File) error {
 		rType := idx("route_type")
 		for _, row := range rec[1:] {
 			if rID >= 0 && rSN >= 0 {
-				g.routeShortNames[row[rID]] = row[rSN]
+				g.RouteShortNames[row[rID]] = row[rSN]
 			}
 			if rID >= 0 && rType >= 0 {
 				if typeInt, err := strconv.Atoi(row[rType]); err == nil {
-					g.routeTypes[row[rID]] = typeInt
+					g.RouteTypes[row[rID]] = typeInt
 				}
 			}
 		}
@@ -157,16 +157,16 @@ func (g *GTFSIndex) consumeCSV(f *zip.File) error {
 		blk := idx("block_id")
 		for _, row := range rec[1:] {
 			if tID >= 0 && rID >= 0 {
-				g.tripToRoute[row[tID]] = row[rID]
+				g.TripToRoute[row[tID]] = row[rID]
 			}
 			if tID >= 0 && hs >= 0 {
-				g.tripHeadsign[row[tID]] = row[hs]
+				g.TripHeadsign[row[tID]] = row[hs]
 			}
 			if tID >= 0 && dir >= 0 {
-				g.tripDirection[row[tID]] = row[dir]
+				g.TripDirection[row[tID]] = row[dir]
 			}
 			if tID >= 0 && blk >= 0 {
-				g.tripBlockID[row[tID]] = row[blk]
+				g.TripBlockID[row[tID]] = row[blk]
 			}
 		}
 	case "stops.txt":
@@ -176,7 +176,7 @@ func (g *GTFSIndex) consumeCSV(f *zip.File) error {
 		sLon := idx("stop_lon")
 		for _, row := range rec[1:] {
 			if sID >= 0 && sN >= 0 {
-				g.stopNames[row[sID]] = row[sN]
+				g.StopNames[row[sID]] = row[sN]
 			}
 			if sID >= 0 && sLat >= 0 && sLon >= 0 {
 				lat, _ := strconv.ParseFloat(row[sLat], 64)
@@ -236,11 +236,11 @@ func (g *GTFSIndex) consumeCSV(f *zip.File) error {
 			sort.Slice(arr, func(i, j int) bool { return arr[i].seq < arr[j].seq })
 			// first/last
 			if len(arr) > 0 {
-				g.tripOriginStop[trip] = arr[0].stop
-				g.tripDestStop[trip] = arr[len(arr)-1].stop
+				g.TripOriginStop[trip] = arr[0].stop
+				g.TripDestStop[trip] = arr[len(arr)-1].stop
 			}
 			// Initialize map for this trip
-			g.stopTimes[trip] = make(map[string]StopTime)
+			g.StopTimes[trip] = make(map[string]StopTime)
 			// stop sequence + index map + stop times data
 			seqStops := make([]string, 0, len(arr))
 			idxMap := make(map[string]int, len(arr))
@@ -250,7 +250,7 @@ func (g *GTFSIndex) consumeCSV(f *zip.File) error {
 					idxMap[v.stop] = i
 				}
 				// Store stop time data in consolidated struct
-				g.stopTimes[trip][v.stop] = StopTime{
+				g.StopTimes[trip][v.stop] = StopTime{
 					ArrivalTime:   v.arrTime,
 					DepartureTime: v.depTime,
 					PickupType:    int8(v.pickupType),
@@ -258,21 +258,21 @@ func (g *GTFSIndex) consumeCSV(f *zip.File) error {
 				}
 			}
 			g.TripStopSeq[trip] = seqStops
-			g.tripStopIdx[trip] = idxMap
+			g.TripStopIdx[trip] = idxMap
 		}
 	case "agency.txt":
 		agID := idx("agency_id")
 		agTZ := idx("agency_timezone")
 		agName := idx("agency_name")
 		if len(rec) > 1 {
-			if agID >= 0 && g.agencyID == "" {
-				g.agencyID = rec[1][agID]
+			if agID >= 0 && g.AgencyID == "" {
+				g.AgencyID = rec[1][agID]
 			}
 			if agTZ >= 0 {
-				g.agencyTZ = rec[1][agTZ]
+				g.AgencyTZ = rec[1][agTZ]
 			}
 			if agName >= 0 {
-				g.agencyName = rec[1][agName]
+				g.AgencyName = rec[1][agName]
 			}
 		}
 	}
