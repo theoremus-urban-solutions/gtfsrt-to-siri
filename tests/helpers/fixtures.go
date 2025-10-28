@@ -39,9 +39,9 @@ func DefaultTestDataPaths() TestDataPaths {
 	basePath := GetTestDataPath()
 	return TestDataPaths{
 		GTFSZip:          filepath.Join(basePath, "gtfs", "sofia-static.zip"),
-		TripUpdates:      filepath.Join(basePath, "gtfsrt", "trip-updates.pb"),
-		VehiclePositions: filepath.Join(basePath, "gtfsrt", "vehicle-positions.pb"),
-		ServiceAlerts:    filepath.Join(basePath, "gtfsrt", "service-alerts.pb"),
+		TripUpdates:      filepath.Join(basePath, "gtfsrt", "trip-updates.pbf"),
+		VehiclePositions: filepath.Join(basePath, "gtfsrt", "vehicle-positions.pbf"),
+		ServiceAlerts:    filepath.Join(basePath, "gtfsrt", "alerts.pbf"),
 	}
 }
 

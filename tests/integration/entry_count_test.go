@@ -17,8 +17,8 @@ func TestVM_EntryCount(t *testing.T) {
 	// Load test data
 	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip", "SOFIA")
 
-	// Count input VehiclePositions from golden file
-	vpData, err := os.ReadFile("../../pbf-input/vehicle-positions-golden.pbf")
+	// Count input VehiclePositions
+	vpData, err := helpers.LoadProtobufFile("testdata/gtfsrt/vehicle-positions.pbf")
 	if err != nil {
 		t.Fatalf("Failed to load vehicle positions: %v", err)
 	}
@@ -72,8 +72,8 @@ func TestET_EntryCount(t *testing.T) {
 	// Load test data
 	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip", "SOFIA")
 
-	// Count input TripUpdates from golden file
-	tuData, err := os.ReadFile("../../pbf-input/trip-updates-golden.pbf")
+	// Count input TripUpdates
+	tuData, err := helpers.LoadProtobufFile("testdata/gtfsrt/trip-updates.pbf")
 	if err != nil {
 		t.Fatalf("Failed to load trip updates: %v", err)
 	}
@@ -136,8 +136,8 @@ func TestSX_EntryCount(t *testing.T) {
 	// Load test data
 	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip", "SOFIA")
 
-	// Count input Alerts from golden file
-	saData, err := os.ReadFile("../../pbf-input/alerts-golden.pbf")
+	// Count input Alerts
+	saData, err := helpers.LoadProtobufFile("testdata/gtfsrt/alerts.pbf")
 	if err != nil {
 		t.Fatalf("Failed to load service alerts: %v", err)
 	}

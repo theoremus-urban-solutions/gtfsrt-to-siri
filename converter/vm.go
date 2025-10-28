@@ -13,10 +13,14 @@ func (c *Converter) buildMVJ(tripID string) siri.MonitoredVehicleJourney {
 	startDate := c.gtfsrt.GetStartDateForTrip(tripID)
 	tripKey := gtfsrt.TripKeyForConverter(tripID, agency, startDate)
 
-	// Prefer RT route_id; fallback to static lookup by tripID
+	// Prefer RT route_id; fallback to static lookup by tripID (ALWAYS use plain tripID for static GTFS)
 	routeID := c.gtfsrt.GetRouteIDForTrip(tripID)
 	if routeID == "" {
 		routeID = c.gtfs.GetRouteIDForTrip(tripID)
+		if routeID == "" {
+			c.warnings.Add(WarningNoRouteID, tripID)
+			routeID = "UNKNOWN"
+		}
 	}
 	// LineRef format: {codespace}:Line:{lineid}
 	lineRef := routeID
@@ -35,6 +39,9 @@ func (c *Converter) buildMVJ(tripID string) siri.MonitoredVehicleJourney {
 		origin = agency + ":Quay:" + originStopID
 	}
 	originName := c.gtfs.GetStopName(originStopID)
+	if originStopID != "" && originName == "" {
+		c.warnings.Add(WarningOriginStopNoName, tripID)
+	}
 
 	destStopID := c.gtfs.GetDestinationStopIDForTrip(tripID)
 	destStopID = applyFieldMutators(destStopID, c.opts.FieldMutators.DestinationRef)
@@ -43,7 +50,13 @@ func (c *Converter) buildMVJ(tripID string) siri.MonitoredVehicleJourney {
 		dest = agency + ":Quay:" + destStopID
 	}
 	head := c.gtfs.GetTripHeadsign(tripID)
-	_ = c.gtfs.GetRouteShortName(routeID) // pub - not used in current VM spec
+
+	// PublishedLineName: try route_short_name, fallback to route_id
+	pub := c.gtfs.GetRouteShortName(routeID)
+	if pub == "" && routeID != "" && routeID != "UNKNOWN" {
+		pub = routeID // Use route_id as fallback
+		c.warnings.Add(WarningNoRouteShortName, tripID)
+	}
 
 	// VehicleRef format: {codespace}:VehicleRef:{vehicle_id}
 	vehRef := ""
@@ -75,6 +88,10 @@ func (c *Converter) buildMVJ(tripID string) siri.MonitoredVehicleJourney {
 		if sB := c.snap.GetBearing(tripKey); sB != nil {
 			bearing = sB
 		}
+	}
+	// Log warning if still no position data
+	if latPtr == nil || lonPtr == nil {
+		c.warnings.Add(WarningNoLatLon, tripID)
 	}
 
 	// siri.FramedVehicleJourneyRef with DataFrameRef (YYYY-MM-DD) and DatedVehicleJourneyRef ({codespace}:ServiceJourney:{tripID})
@@ -274,6 +291,7 @@ func (c *Converter) buildMonitoredCall(tripID string) *siri.MonitoredCall {
 		// Fallback to first onward stop from TripUpdates if available
 		stops := c.gtfsrt.GetOnwardStopIDsForTrip(tripID)
 		if len(stops) == 0 {
+			c.warnings.Add(WarningNoOnwardStops, tripID)
 			return nil
 		}
 		currentStopID = stops[0]
@@ -291,6 +309,9 @@ func (c *Converter) buildMonitoredCall(tripID string) *siri.MonitoredCall {
 	vehicleAtStop := !math.IsNaN(vehKM) && distanceToStop >= -50 && distanceToStop <= 50
 
 	stopName := c.gtfs.GetStopName(currentStopID)
+	if stopName == "" {
+		c.warnings.Add(WarningMonitoredCallStopNoName, tripID)
+	}
 
 	// Get stop order/sequence from GTFS static
 	var order *int

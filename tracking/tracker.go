@@ -118,18 +118,69 @@ func NewSnapshot(gtfsIdx *gtfs.GTFSIndex, rt *gtfsrt.GTFSRTWrapper, agencyID str
 				}
 			}
 		} else {
-			// derive distance from RT position by projection
-			shapeID := gtfsIdx.GetShapeIDForTrip(tripKey)
-			pts := gtfsIdx.ShapePoints[shapeID]
-			if len(pts) > 1 {
-				idx, t, _ := gtfs.NearestSegmentProjection(pts, [2]float64{coords[0][0], coords[0][1]})
-				cum := gtfsIdx.ShapeCumKM[shapeID]
-				if idx >= 0 && idx < len(cum) {
-					if idx == len(pts)-1 {
-						startDistKM = cum[idx]
-					} else {
-						segKM := gtfs.HasversineKM(pts[idx][1], pts[idx][0], pts[idx+1][1], pts[idx+1][0])
-						startDistKM = cum[idx] + t*segKM
+			// derive distance from RT position by projection onto stop segments
+			stopSeq := gtfsIdx.TripStopSeq[tripKey]
+			if len(stopSeq) >= 2 {
+				vehCoord := [2]float64{coords[0][0], coords[0][1]}
+
+				minDist := math.MaxFloat64
+				bestSegIdx := 0
+				bestT := 0.0
+
+				for i := 0; i < len(stopSeq)-1; i++ {
+					c1, ok1 := gtfsIdx.StopCoord[stopSeq[i]]
+					c2, ok2 := gtfsIdx.StopCoord[stopSeq[i+1]]
+					if !ok1 || !ok2 {
+						continue
+					}
+
+					// Project vehicle onto segment between c1 and c2
+					vx := c2[0] - c1[0]
+					vy := c2[1] - c1[1]
+					wx := vehCoord[0] - c1[0]
+					wy := vehCoord[1] - c1[1]
+
+					denom := vx*vx + vy*vy
+					t := 0.0
+					if denom > 0 {
+						t = (wx*vx + wy*vy) / denom
+						if t < 0 {
+							t = 0
+						} else if t > 1 {
+							t = 1
+						}
+					}
+
+					px := c1[0] + t*vx
+					py := c1[1] + t*vy
+
+					dx := vehCoord[0] - px
+					dy := vehCoord[1] - py
+					dist := dx*dx + dy*dy
+
+					if dist < minDist {
+						minDist = dist
+						bestSegIdx = i
+						bestT = t
+					}
+				}
+
+				// Compute cumulative distance to best segment + fractional
+				startDistKM = 0.0
+				for j := 0; j < bestSegIdx; j++ {
+					sc1, ok1 := gtfsIdx.StopCoord[stopSeq[j]]
+					sc2, ok2 := gtfsIdx.StopCoord[stopSeq[j+1]]
+					if ok1 && ok2 {
+						startDistKM += gtfs.HasversineKM(sc1[1], sc1[0], sc2[1], sc2[0])
+					}
+				}
+				// Add fractional distance within best segment
+				if bestSegIdx < len(stopSeq)-1 {
+					c1, ok1 := gtfsIdx.StopCoord[stopSeq[bestSegIdx]]
+					c2, ok2 := gtfsIdx.StopCoord[stopSeq[bestSegIdx+1]]
+					if ok1 && ok2 {
+						segKM := gtfs.HasversineKM(c1[1], c1[0], c2[1], c2[0])
+						startDistKM += bestT * segKM
 					}
 				}
 			}

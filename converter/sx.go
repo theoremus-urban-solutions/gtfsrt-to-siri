@@ -1,6 +1,8 @@
 package converter
 
 import (
+	"log"
+
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/gtfsrt"
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/utils"
 	"github.com/theoremus-urban-solutions/transit-types/siri"
@@ -33,6 +35,14 @@ func (c *Converter) BuildSituationExchange() siri.SituationExchangeDelivery {
 			summaryBG := causeBG + ": " + effectBG
 			summaries = append(summaries, siri.NaturalLanguageString{Lang: "bg", Text: summaryBG})
 		}
+		// Log if no summary available d
+		if len(summaries) == 0 {
+			c.warnings.Add(WarningNoSummary, a.ID)
+		}
+		// Log if no summary available
+		if len(summaries) == 0 {
+			c.warnings.Add(WarningNoSummary, a.ID)
+		}
 
 		// Build localized descriptions
 		descriptions := []siri.NaturalLanguageString{}
@@ -49,6 +59,14 @@ func (c *Converter) BuildSituationExchange() siri.SituationExchangeDelivery {
 				description = effectPrefix + ": " + a.Description
 			}
 			descriptions = append(descriptions, siri.NaturalLanguageString{Lang: "en", Text: description})
+		}
+		// Log if no description  d
+		if len(descriptions) == 0 {
+			c.warnings.Add(WarningNoDescription, a.ID)
+		}
+		// Log if no description available
+		if len(descriptions) == 0 {
+			c.warnings.Add(WarningNoDescription, a.ID)
 		}
 
 		// Build InfoLinks from URLs
@@ -115,8 +133,15 @@ func (c *Converter) BuildSituationExchange() siri.SituationExchangeDelivery {
 			vj := siri.AffectedVehicleJourney{
 				DatedVehicleJourneyRef: gtfsrt.TripKeyForConverter(tid, c.opts.AgencyID, c.gtfsrt.GetStartDateForTrip(tid)),
 			}
-			// LineRef with codespace prefix
-			if rid := c.gtfsrt.GetRouteIDForTrip(tid); rid != "" {
+			// LineRef with codespace prefix - try GTFS-RT first, then static GTFS (ALWAYS use plain tripID for static)
+			rid := c.gtfsrt.GetRouteIDForTrip(tid)
+			if rid == "" {
+				rid = c.gtfs.GetRouteIDForTrip(tid)
+				if rid == "" {
+					c.warnings.Add(WarningNoRouteID, tid)
+				}
+			}
+			if rid != "" {
 				vj.LineRef = codespace + ":Line:" + rid
 			}
 			vehicleJourneys = append(vehicleJourneys, vj)
@@ -150,21 +175,20 @@ func (c *Converter) BuildSituationExchange() siri.SituationExchangeDelivery {
 		// Build StopPoints for stop-only alerts
 		var stopPoints []siri.AffectedStopPoint
 		for _, sid := range a.StopIDs {
+			// Check if stop exists in static GTFS
+			if stopName := c.gtfs.GetStopName(sid); stopName == "" {
+				c.warnings.Add(WarningStopNotFound, sid)
+			}
 			stopPoints = append(stopPoints, siri.AffectedStopPoint{
 				StopPointRef: applyFieldMutators(sid, c.opts.FieldMutators.StopPointRef),
 			})
 		}
-		if len(stopPoints) > 0 {
-			affects.StopPoints = &siri.AffectedStopPoints{
-				AffectedStopPoint: stopPoints,
-			}
-		}
 
-		if affects.Networks != nil || affects.StopPoints != nil || affects.VehicleJourneys != nil {
-			el.Affects = affects
+		// Log if alert has no informed entities (system-wide alert)
+		if len(a.TripIDs) == 0 && len(a.RouteIDs) == 0 && len(a.StopIDs) == 0 {
+			log.Printf("[SX] INFO: alert %s has no informed entities (system-wide alert)", a.ID)
 		}
-
-		// Add Consequences derived from GTFS-RT Effect
+		// Add siri.Consequences derived from GTFS-RT Effect
 		if cond := effectToCondition(a.Effect); cond != "" {
 			el.Consequences = &siri.Consequences{
 				Consequence: []siri.Consequence{{Condition: cond}},
