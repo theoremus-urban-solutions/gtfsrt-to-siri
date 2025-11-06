@@ -16,40 +16,93 @@ go build -o gtfsrt-to-siri ./cmd/gtfsrt-to-siri/
 
 ## CLI Usage
 
-### Basic Commands
+### Quick Start
 
-**Vehicle Monitoring (VM)**
+Get help:
 ```bash
-./gtfsrt-to-siri -mode=oneshot -call=vm -format=xml -modules=tu,vp
-./gtfsrt-to-siri -call=vm -format=json  # JSON output
+./gtfsrt-to-siri -help
 ```
 
-**Estimated Timetable (ET)**
+Generate Vehicle Monitoring + Estimated Timetable from URLs (XML):
 ```bash
-./gtfsrt-to-siri -call=et -format=xml -modules=tu,vp
-./gtfsrt-to-siri -call=et -monitoringRef=STOP_ID -lineRef=ROUTE_ID -directionRef=0
+./gtfsrt-to-siri \
+  -tripUpdates=https://example.com/api/v1/trip-updates \
+  -vehiclePositions=https://example.com/api/v1/vehicle-positions
 ```
 
-**Situation Exchange (SX)**
+Or use your config file:
 ```bash
-./gtfsrt-to-siri -call=sx -format=xml -modules=alerts
+./gtfsrt-to-siri -read-from-config
+```
+
+### Common Examples
+
+**From URLs: Vehicle Monitoring + Estimated Timetable**
+```bash
+# XML output (default)
+./gtfsrt-to-siri \
+  -tripUpdates=https://example.com/tu \
+  -vehiclePositions=https://example.com/vp
+
+# JSON output
+./gtfsrt-to-siri \
+  -tripUpdates=https://example.com/tu \
+  -vehiclePositions=https://example.com/vp \
+  -format=json
+```
+
+**From URLs: Estimated Timetable only**
+```bash
+./gtfsrt-to-siri -tripUpdates=https://example.com/tu
+```
+
+**From URLs: Situation Exchange (service alerts)**
+```bash
+./gtfsrt-to-siri -alerts=https://example.com/alerts
+```
+
+**From URLs: All formats (VM + ET + SX)**
+```bash
+./gtfsrt-to-siri \
+  -tripUpdates=https://example.com/tu \
+  -vehiclePositions=https://example.com/vp \
+  -alerts=https://example.com/alerts
+```
+
+**From config file**
+```bash
+./gtfsrt-to-siri -read-from-config          # XML (default)
+./gtfsrt-to-siri -read-from-config -format=json
 ```
 
 ### CLI Flags
 
 | Flag | Description | Default |
 |------|-------------|---------|
-| `-mode` | Execution mode | `oneshot` |
-| `-call` | SIRI module: `vm`, `et`, `sx` | `vm` |
-| `-format` | Output format: `json`, `xml` | `json` |
-| `-modules` | GTFS-RT modules to fetch: `tu`, `vp`, `alerts` | `tu,vp` |
-| `-feed` | Feed name from `config.yml` feeds list | (first feed) |
-| `-tripUpdates` | Override TripUpdates URL | (from config) |
-| `-vehiclePositions` | Override VehiclePositions URL | (from config) |
-| `-serviceAlerts` | Override ServiceAlerts URL | (from config) |
-| `-monitoringRef` | Stop ID filter (optional for ET) | |
-| `-lineRef` | Filter by route/line | |
-| `-directionRef` | Filter by direction: `0` or `1` | |
+| `-tripUpdates` | TripUpdates feed URL | (none) |
+| `-vehiclePositions` | VehiclePositions feed URL | (none) |
+| `-alerts` | ServiceAlerts feed URL | (none) |
+| `-read-from-config` | Read all URLs from config.yml (mutually exclusive with URL flags) | `false` |
+| `-format` | Output format: `json`, `xml` | `xml` |
+
+### Requirements
+
+- **Must provide:** At least one URL flag OR use `-read-from-config`
+- **Cannot mix:** URL flags and `-read-from-config` are mutually exclusive
+- **Config file:** `config.yml` must exist in current directory (contains GTFS static URL and optionally GTFS-RT URLs)
+
+### How URLs Determine Output
+
+The CLI generates **all applicable SIRI formats** based on which URLs you provide:
+
+| URLs Provided | Generated Formats | Description |
+|---------------|------------------|-------------|
+| `-tripUpdates` only | **ET** (Estimated Timetable) | Stop-level predictions |
+| `-alerts` only | **SX** (Situation Exchange) | Service alerts |
+| `-tripUpdates` + `-vehiclePositions` | **VM** + **ET** | Vehicle positions + predictions |
+| All three URLs | **VM** + **ET** + **SX** | All three formats |
+
+**Note:** The CLI outputs complete unfiltered data. Apply filters externally if needed.
 
 ## Library Usage
 

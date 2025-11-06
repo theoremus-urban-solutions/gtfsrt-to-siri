@@ -119,8 +119,6 @@ func CreateTestConverter(t *testing.T, agencyID string, opts converter.Converter
 // DefaultConverterOptions returns common test options
 func DefaultConverterOptions(agencyID string) converter.ConverterOptions {
 	return converter.ConverterOptions{
-		AgencyID:       agencyID,
-		ReadIntervalMS: 30000,
-		FieldMutators:  converter.FieldMutators{},
+		AgencyID: agencyID,
 	}
 }

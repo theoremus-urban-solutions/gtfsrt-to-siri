@@ -69,8 +69,6 @@ func createTestConverter(t *testing.T, opts converter.ConverterOptions) *convert
 func TestConverter_BuildCall_ThroughET(t *testing.T) {
 	opts := converter.ConverterOptions{
 		AgencyID:       "TEST",
-		ReadIntervalMS: 30000,
-		FieldMutators:  converter.FieldMutators{},
 	}
 
 	c := createTestConverter(t, opts)
@@ -86,29 +84,8 @@ func TestConverter_BuildCall_ThroughET(t *testing.T) {
 	t.Log("✓ buildCall is exercised through ET conversion")
 }
 
-// TestConverter_FieldMutators tests field mutation logic
-func TestConverter_FieldMutators_Prefix(t *testing.T) {
-	opts := converter.ConverterOptions{
-		AgencyID:       "TEST",
-		ReadIntervalMS: 30000,
-		FieldMutators: converter.FieldMutators{
-			OriginRef:      []string{"OLD_ORIGIN", "NEW_ORIGIN"},
-			StopPointRef:   []string{"OLD_STOP", "NEW_STOP"},
-			DestinationRef: []string{"OLD_DEST", "NEW_DEST"},
-		},
-	}
-
-	// Verify mutator config is set
-	if len(opts.FieldMutators.OriginRef) == 0 {
-		t.Error("Should have OriginRef mutators")
-	}
-
-	if opts.FieldMutators.OriginRef[0] != "OLD_ORIGIN" {
-		t.Errorf("Expected OLD_ORIGIN, got %s", opts.FieldMutators.OriginRef[0])
-	}
-
-	t.Log("✓ Field mutators configured and available")
-}
+// TestConverter_FieldMutators removed - field mutators no longer supported
+// The feature was bloat and unused in production
 
 // TestConverter_MapVehicleMode tests vehicle mode mapping
 func TestConverter_MapVehicleMode(t *testing.T) {
@@ -181,8 +158,6 @@ func TestConverter_DelayFormat(t *testing.T) {
 func TestConverter_EmptyData(t *testing.T) {
 	opts := converter.ConverterOptions{
 		AgencyID:       "TEST",
-		ReadIntervalMS: 30000,
-		FieldMutators:  converter.FieldMutators{},
 	}
 
 	c := createTestConverter(t, opts)
@@ -209,8 +184,6 @@ func TestConverter_EmptyData(t *testing.T) {
 func TestConverter_ETEmptyData(t *testing.T) {
 	opts := converter.ConverterOptions{
 		AgencyID:       "TEST",
-		ReadIntervalMS: 30000,
-		FieldMutators:  converter.FieldMutators{},
 	}
 
 	c := createTestConverter(t, opts)
@@ -232,8 +205,6 @@ func TestConverter_ETEmptyData(t *testing.T) {
 func TestConverter_SXEmptyData(t *testing.T) {
 	opts := converter.ConverterOptions{
 		AgencyID:       "TEST",
-		ReadIntervalMS: 30000,
-		FieldMutators:  converter.FieldMutators{},
 	}
 
 	c := createTestConverter(t, opts)
@@ -257,8 +228,6 @@ func TestConverter_SXEmptyData(t *testing.T) {
 func TestConverter_GetState(t *testing.T) {
 	opts := converter.ConverterOptions{
 		AgencyID:       "TEST",
-		ReadIntervalMS: 30000,
-		FieldMutators:  converter.FieldMutators{},
 	}
 
 	c := createTestConverter(t, opts)
@@ -280,25 +249,11 @@ func TestConverter_GetState(t *testing.T) {
 // TestConverterOptions validates converter options structure
 func TestConverterOptions(t *testing.T) {
 	opts := converter.ConverterOptions{
-		AgencyID:       "TEST_AGENCY",
-		ReadIntervalMS: 30000,
-		FieldMutators: converter.FieldMutators{
-			StopPointRef:   []string{"OLD", "NEW"},
-			OriginRef:      []string{"OLD", "NEW"},
-			DestinationRef: []string{"OLD", "NEW"},
-		},
+		AgencyID: "TEST_AGENCY",
 	}
 
 	if opts.AgencyID != "TEST_AGENCY" {
 		t.Errorf("Expected TEST_AGENCY, got %s", opts.AgencyID)
-	}
-
-	if opts.ReadIntervalMS != 30000 {
-		t.Errorf("Expected 30000, got %d", opts.ReadIntervalMS)
-	}
-
-	if len(opts.FieldMutators.StopPointRef) != 2 {
-		t.Error("Should have 2 StopPointRef mutators")
 	}
 
 	t.Log("✓ ConverterOptions structure validated")

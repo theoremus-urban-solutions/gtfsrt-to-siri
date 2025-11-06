@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/config"
@@ -13,18 +14,59 @@ import (
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/utils"
 )
 
+func printUsage() {
+	fmt.Fprintf(os.Stderr, `GTFS-Realtime to SIRI Converter
+Converts GTFS-RT feeds to SIRI format (Vehicle Monitoring, Estimated Timetable, Situation Exchange)
+
+Usage:
+  gtfsrt-to-siri [URL flags] [options]
+  gtfsrt-to-siri -read-from-config [options]
+
+Examples:
+  # From URLs: Vehicle Monitoring + Estimated Timetable
+  gtfsrt-to-siri \
+    -tripUpdates=https://example.com/tu \
+    -vehiclePositions=https://example.com/vp
+
+  # From URLs: Estimated Timetable only (JSON)
+  gtfsrt-to-siri -tripUpdates=https://example.com/tu -format=json
+
+  # From URLs: All formats (VM + ET + SX)
+  gtfsrt-to-siri \
+    -tripUpdates=https://example.com/tu \
+    -vehiclePositions=https://example.com/vp \
+    -alerts=https://example.com/alerts
+
+  # From config file
+  gtfsrt-to-siri -read-from-config
+
+Flags:
+`)
+	flag.PrintDefaults()
+	fmt.Fprintf(os.Stderr, `
+Output Formats Generated:
+  -tripUpdates only           →  ET (Estimated Timetable)
+  -alerts only                →  SX (Situation Exchange)
+  -tripUpdates + -vehiclePositions  →  VM (Vehicle Monitoring) + ET
+  All three URLs              →  VM + ET + SX
+
+Note: You must provide at least one URL flag OR use -read-from-config.
+      URL flags and -read-from-config are mutually exclusive.
+
+`)
+}
+
 func main() {
-	mode := flag.String("mode", "oneshot", "oneshot")
-	format := flag.String("format", "json", "json|xml")
-	call := flag.String("call", "vm", "vm|et|sx")
-	feedName := flag.String("feed", "", "feed name from config.feeds[]")
-	tripUpdates := flag.String("tripUpdates", "", "GTFS-RT TripUpdates URL (overrides config)")
-	vehiclePositions := flag.String("vehiclePositions", "", "GTFS-RT VehiclePositions URL (overrides config)")
-	serviceAlerts := flag.String("serviceAlerts", "", "GTFS-RT ServiceAlerts URL (overrides config)")
-	monitoringRef := flag.String("monitoringRef", "", "MonitoringRef (stop_id) for filtering")
-	lineRef := flag.String("lineRef", "", "LineRef filter (route or AGENCY_route)")
-	directionRef := flag.String("directionRef", "", "DirectionRef filter (0|1)")
-	modules := flag.String("modules", "tu,vp", "Comma-separated GTFS-RT modules to fetch: tu,vp,alerts")
+	// Core flags
+	format := flag.String("format", "xml", "Output format: json or xml")
+	readFromConfig := flag.Bool("read-from-config", false, "Read GTFS-RT URLs from config.yml (mutually exclusive with URL flags)")
+
+	// URL flags (mutually exclusive with -read-from-config)
+	tripUpdates := flag.String("tripUpdates", "", "TripUpdates feed URL")
+	vehiclePositions := flag.String("vehiclePositions", "", "VehiclePositions feed URL")
+	alerts := flag.String("alerts", "", "ServiceAlerts feed URL")
+
+	flag.Usage = printUsage
 	flag.Parse()
 
 	utils.InitLogging()
@@ -32,123 +74,125 @@ func main() {
 		panic(err)
 	}
 
-	gtfsCfg, rtCfg := config.SelectFeed(*feedName)
+	// Validate: either read-from-config OR at least one URL flag
+	hasURLFlags := *tripUpdates != "" || *vehiclePositions != "" || *alerts != ""
 
-	switch *mode {
-	case "oneshot":
-		// Fetch GTFS static data
-		gtfsBytes, err := gtfs.FetchGTFSData(gtfsCfg.StaticURL)
-		if err != nil {
-			panic(fmt.Sprintf("Failed to fetch GTFS: %v", err))
-		}
-		gtfsIndex, err := gtfs.NewGTFSIndexFromBytes(gtfsBytes, gtfsCfg.AgencyID)
-		if err != nil {
-			panic(fmt.Sprintf("Failed to parse GTFS: %v", err))
-		}
+	if *readFromConfig && hasURLFlags {
+		fmt.Fprintf(os.Stderr, "Error: -read-from-config cannot be used with URL flags (-tripUpdates, -vehiclePositions, -alerts)\n\n")
+		flag.Usage()
+		os.Exit(1)
+	}
 
-		// Determine which modules to fetch
-		tu := rtCfg.TripUpdatesURL
-		vp := rtCfg.VehiclePositionsURL
-		if *tripUpdates != "" {
-			tu = *tripUpdates
-		}
-		if *vehiclePositions != "" {
-			vp = *vehiclePositions
-		}
+	if !*readFromConfig && !hasURLFlags {
+		fmt.Fprintf(os.Stderr, "Error: Must provide at least one URL flag or use -read-from-config\n\n")
+		flag.Usage()
+		os.Exit(1)
+	}
 
-		includeTU, includeVP, includeAlerts := false, false, false
-		{
-			mset := map[string]bool{}
-			for _, m := range strings.Split(*modules, ",") {
-				m = strings.TrimSpace(strings.ToLower(m))
-				if m != "" {
-					mset[m] = true
-				}
-			}
-			includeTU = mset["tu"]
-			includeVP = mset["vp"]
-			includeAlerts = mset["alerts"]
-		}
-		if !includeTU {
-			tu = ""
-		}
-		if !includeVP {
-			vp = ""
-		}
+	// Determine URLs and config based on mode
+	var tu, vp, alertsURL string
+	var gtfsCfg config.GTFSConfig
 
-		alerts := rtCfg.ServiceAlertsURL
-		if *serviceAlerts != "" {
-			alerts = *serviceAlerts
-		}
-		if !includeAlerts {
-			alerts = ""
-		}
-		if *call == "sx" && !includeAlerts {
-			panic("alerts module required for sx call; include via -modules=alerts")
-		}
+	if *readFromConfig {
+		// Read from config (use first feed or top-level config)
+		var rtCfg config.GTFSRTConfig
+		gtfsCfg, rtCfg = config.SelectFeed("")
+		tu = rtCfg.TripUpdatesURL
+		vp = rtCfg.VehiclePositionsURL
+		alertsURL = rtCfg.ServiceAlertsURL
+	} else {
+		// Use provided URLs and top-level GTFS config
+		tu = *tripUpdates
+		vp = *vehiclePositions
+		alertsURL = *alerts
+		gtfsCfg = config.Config.GTFS
+	}
 
-		// Fetch GTFS-RT data as raw bytes
-		f := newFetcher()
-		tuBytes, vpBytes, alertBytes, err := f.fetchAll(tu, vp, alerts)
-		if err != nil {
-			panic(fmt.Sprintf("Failed to fetch GTFS-RT: %v", err))
-		}
+	// Fetch GTFS static data
+	gtfsBytes, err := gtfs.FetchGTFSData(gtfsCfg.StaticURL)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to fetch GTFS: %v", err))
+	}
+	gtfsIndex, err := gtfs.NewGTFSIndexFromBytes(gtfsBytes, gtfsCfg.AgencyID)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to parse GTFS: %v", err))
+	}
 
-		// Create GTFS-RT wrapper from raw bytes
-		rt, err := gtfsrt.NewGTFSRTWrapper(tuBytes, vpBytes, alertBytes)
-		if err != nil {
-			panic(fmt.Sprintf("Failed to parse GTFS-RT: %v", err))
-		}
+	// Determine which modules are available based on URLs
+	includeTU := tu != ""
+	includeVP := vp != ""
+	includeAlerts := alertsURL != ""
 
-		// Create converter with options from config
-		opts := converter.ConverterOptions{
-			AgencyID:       gtfsCfg.AgencyID,
-			ReadIntervalMS: int64(rtCfg.ReadIntervalMS),
-			FieldMutators: converter.FieldMutators{
-				StopPointRef:   config.Config.Converter.FieldMutators.StopPointRef,
-				OriginRef:      config.Config.Converter.FieldMutators.OriginRef,
-				DestinationRef: config.Config.Converter.FieldMutators.DestinationRef,
-			},
-		}
-		conv := converter.NewConverter(gtfsIndex, rt, opts)
-		rb := formatter.NewResponseBuilder()
+	// Fetch GTFS-RT data as raw bytes
+	f := newFetcher()
+	tuBytes, vpBytes, alertBytes, err := f.fetchAll(tu, vp, alertsURL)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to fetch GTFS-RT: %v", err))
+	}
 
+	// Create GTFS-RT wrapper from raw bytes
+	rt, err := gtfsrt.NewGTFSRTWrapper(tuBytes, vpBytes, alertBytes)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to parse GTFS-RT: %v", err))
+	}
+
+	// Create converter with options from config
+	opts := converter.ConverterOptions{
+		AgencyID: gtfsCfg.AgencyID,
+	}
+	conv := converter.NewConverter(gtfsIndex, rt, opts)
+	rb := formatter.NewResponseBuilder()
+	codespace := config.Config.GTFS.AgencyID
+
+	// Generate all applicable SIRI formats based on available modules
+	var outputs []string
+
+	// VM: requires both TU and VP
+	if includeTU && includeVP {
+		resp := conv.GetCompleteVehicleMonitoringResponse()
 		var buf []byte
-		codespace := config.Config.GTFS.AgencyID
-
-		switch *call {
-		case "et":
-			et := conv.BuildEstimatedTimetable()
-			// Apply filters if provided
-			if *monitoringRef != "" || *lineRef != "" || *directionRef != "" {
-				et = formatter.FilterEstimatedTimetable(et, *monitoringRef, *lineRef, *directionRef)
-			}
-			// Wrap in SIRI response
-			resp := formatter.WrapEstimatedTimetableResponse(et, codespace)
-			if strings.ToLower(*format) == "xml" {
-				buf = rb.BuildXML(resp)
-			} else {
-				buf = rb.BuildJSON(resp)
-			}
-		case "vm":
-			resp := conv.GetCompleteVehicleMonitoringResponse()
-			if strings.ToLower(*format) == "xml" {
-				buf = rb.BuildXML(resp)
-			} else {
-				buf = rb.BuildJSON(resp)
-			}
-		case "sx":
-			sx := conv.BuildSituationExchange()
-			timestamp := rt.GetTimestampForFeedMessage()
-			resp := formatter.WrapSituationExchangeResponse(sx, timestamp, codespace)
-			if strings.ToLower(*format) == "xml" {
-				buf = rb.BuildXML(resp)
-			} else {
-				buf = rb.BuildJSON(resp)
-			}
+		if strings.ToLower(*format) == "xml" {
+			buf = rb.BuildXML(resp)
+		} else {
+			buf = rb.BuildJSON(resp)
 		}
-		fmt.Println(string(buf))
-	default:
-		panic("unknown mode")
+		outputs = append(outputs, fmt.Sprintf("<!-- Vehicle Monitoring -->\n%s", string(buf)))
+	}
+
+	// ET: requires TU (with or without VP)
+	if includeTU {
+		et := conv.BuildEstimatedTimetable()
+		resp := formatter.WrapEstimatedTimetableResponse(et, codespace)
+		var buf []byte
+		if strings.ToLower(*format) == "xml" {
+			buf = rb.BuildXML(resp)
+		} else {
+			buf = rb.BuildJSON(resp)
+		}
+		outputs = append(outputs, fmt.Sprintf("<!-- Estimated Timetable -->\n%s", string(buf)))
+	}
+
+	// SX: requires alerts
+	if includeAlerts {
+		sx := conv.BuildSituationExchange()
+		timestamp := rt.GetTimestampForFeedMessage()
+		resp := formatter.WrapSituationExchangeResponse(sx, timestamp, codespace)
+		var buf []byte
+		if strings.ToLower(*format) == "xml" {
+			buf = rb.BuildXML(resp)
+		} else {
+			buf = rb.BuildJSON(resp)
+		}
+		outputs = append(outputs, fmt.Sprintf("<!-- Situation Exchange -->\n%s", string(buf)))
+	}
+
+	// Output all generated formats
+	if len(outputs) == 0 {
+		panic("No valid module combination. Use: tu (ET), alerts (SX), or tu,vp (VM+ET)")
+	}
+
+	for _, output := range outputs {
+		fmt.Println(output)
+		fmt.Println() // Separator between formats
 	}
 }

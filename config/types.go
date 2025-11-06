@@ -17,23 +17,11 @@ type GTFSRTConfig struct {
 	TripUpdatesURL      string `yaml:"tripUpdatesURL" validate:"omitempty,url"`
 	VehiclePositionsURL string `yaml:"vehiclePositionsURL" validate:"omitempty,url"`
 	ServiceAlertsURL    string `yaml:"serviceAlertsURL" validate:"omitempty,url"`
-	ReadIntervalMS      int    `yaml:"readIntervalMS" validate:"gte=0"`
-	TimeoutMS           int    `yaml:"timeoutMS" validate:"gte=0"`
-}
-
-// FieldMutators contains field transformation rules
-type FieldMutators struct {
-	OriginRef      []string `yaml:"OriginRef"`
-	StopPointRef   []string `yaml:"StopPointRef"`
-	DestinationRef []string `yaml:"DestinationRef"`
 }
 
 // ConverterConfig contains converter-specific configuration
 type ConverterConfig struct {
-	FieldMutators                   FieldMutators `yaml:"fieldMutators"`
-	UnscheduledTripIndicator        string        `yaml:"unscheduledTripIndicator"`
-	CallDistanceAlongRouteNumDigits int           `yaml:"callDistanceAlongRouteNumOfDigits"`
-	TripKeyStrategy                 string        `yaml:"tripKeyStrategy"` // raw|startDateTrip|agencyTrip|agencyStartDateTrip
+	// Intentionally empty - reserved for future use
 }
 
 // Feed represents a single GTFS feed configuration

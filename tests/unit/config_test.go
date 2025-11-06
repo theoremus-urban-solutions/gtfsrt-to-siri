@@ -258,59 +258,14 @@ func TestConfig_ValidateFeedConfig(t *testing.T) {
 	t.Log("✓ Feed config structure valid")
 }
 
-// TestConfig_ConverterConfig tests converter configuration
+// TestConfig_ConverterConfig tests converter configuration structure exists
 func TestConfig_ConverterConfig(t *testing.T) {
-	converterCfg := config.ConverterConfig{
-		CallDistanceAlongRouteNumDigits: 3,
-		TripKeyStrategy:                 "raw",
-		UnscheduledTripIndicator:        "_",
-	}
+	converterCfg := config.ConverterConfig{}
 
-	if converterCfg.TripKeyStrategy != "raw" {
-		t.Errorf("Expected 'raw', got '%s'", converterCfg.TripKeyStrategy)
-	}
+	// Converter config is intentionally empty - reserved for future use
+	_ = converterCfg
 
-	if converterCfg.CallDistanceAlongRouteNumDigits != 3 {
-		t.Error("Distance digits should be 3")
-	}
-
-	t.Log("✓ Converter config validated")
-}
-
-// TestConfig_TripKeyStrategies tests different trip key strategy values
-func TestConfig_TripKeyStrategies(t *testing.T) {
-	strategies := []string{"raw", "startDateTrip", "agencyTrip", "agencyStartDateTrip"}
-
-	for _, strategy := range strategies {
-		cfg := config.ConverterConfig{
-			TripKeyStrategy: strategy,
-		}
-
-		if cfg.TripKeyStrategy != strategy {
-			t.Errorf("Strategy should be '%s', got '%s'", strategy, cfg.TripKeyStrategy)
-		}
-	}
-
-	t.Log("✓ All trip key strategies are valid")
-}
-
-// TestConfig_FieldMutators tests field mutator configuration
-func TestConfig_FieldMutators(t *testing.T) {
-	mutators := config.FieldMutators{
-		OriginRef:      []string{"prefix:AGENCY:"},
-		StopPointRef:   []string{"prefix:AGENCY:"},
-		DestinationRef: []string{"prefix:AGENCY:"},
-	}
-
-	if len(mutators.OriginRef) == 0 {
-		t.Error("Should have OriginRef mutators")
-	}
-
-	if mutators.OriginRef[0] != "prefix:AGENCY:" {
-		t.Errorf("Expected 'prefix:AGENCY:', got '%s'", mutators.OriginRef[0])
-	}
-
-	t.Log("✓ Field mutators configured")
+	t.Log("✓ Converter config structure validated")
 }
 
 // TestConfig_ServerConfig tests server configuration
@@ -333,9 +288,7 @@ func TestConfig_YAMLMarshaling(t *testing.T) {
 			AgencyID:  "TEST",
 			StaticURL: "http://example.com/gtfs.zip",
 		},
-		Converter: config.ConverterConfig{
-			TripKeyStrategy: "raw",
-		},
+		Converter: config.ConverterConfig{},
 	}
 
 	// Marshal to YAML

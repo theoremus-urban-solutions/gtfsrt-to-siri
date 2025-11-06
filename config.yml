@@ -9,10 +9,3 @@ gtfsrt:
   tripUpdatesURL: https://gtfs-realtime-sofia.theoremus.com/api/v1/trip-updates
   vehiclePositionsURL: https://gtfs-realtime-sofia.theoremus.com/api/v1/vehicle-positions
   serviceAlertsURL: https://gtfs-realtime-sofia.theoremus.com/api/v1/alerts
-  readIntervalMS: 30000
-  timeoutMS: 5000
-
-converter:
-  unscheduledTripIndicator: _
-  callDistanceAlongRouteNumOfDigits: 3
-  tripKeyStrategy: raw

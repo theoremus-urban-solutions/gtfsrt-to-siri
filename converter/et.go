@@ -192,7 +192,7 @@ func (c *Converter) buildCallSequence(tripID, gtfsLookupKey string, stopSequence
 		}
 
 		// Format StopPointRef as {codespace}:Quay:{stop_id}, then apply field mutators
-		stopPointRef := applyFieldMutators(agencyID+":Quay:"+stopID, c.opts.FieldMutators.StopPointRef)
+		stopPointRef := agencyID+":Quay:"+stopID
 
 		// Check if cancelled (schedule_relationship = 1 SKIPPED)
 		schedRel := c.gtfsrt.GetScheduleRelationshipForStop(tripID, stopID)
@@ -326,7 +326,7 @@ func (c *Converter) buildCallSequenceFromRTOnly(tripID string, now int64) ([]sir
 		}
 
 		// Format StopPointRef as {codespace}:Quay:{stop_id}, then apply field mutators
-		stopPointRef := applyFieldMutators(agencyID+":Quay:"+stopID, c.opts.FieldMutators.StopPointRef)
+		stopPointRef := agencyID+":Quay:"+stopID
 
 		// Check if cancelled (schedule_relationship = 1 SKIPPED)
 		schedRel := c.gtfsrt.GetScheduleRelationshipForStop(tripID, stopID)

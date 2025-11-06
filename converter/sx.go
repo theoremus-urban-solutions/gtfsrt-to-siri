@@ -147,7 +147,7 @@ func (c *Converter) BuildSituationExchange() siri.SituationExchange {
 				c.warnings.Add(WarningStopNotFound, sid)
 			}
 			el.Affects.StopPoints = append(el.Affects.StopPoints, siri.AffectedStopPoint{
-				StopPointRef: applyFieldMutators(sid, c.opts.FieldMutators.StopPointRef),
+				StopPointRef: sid,
 			})
 		}
 

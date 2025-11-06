@@ -33,7 +33,6 @@ func (c *Converter) buildMVJ(tripID string) siri.MonitoredVehicleJourney {
 	}
 	// Get origin and destination stops (format: {codespace}:Quay:{stopid})
 	originStopID := c.gtfs.GetOriginStopIDForTrip(tripID)
-	originStopID = applyFieldMutators(originStopID, c.opts.FieldMutators.OriginRef)
 	origin := ""
 	if originStopID != "" && agency != "" {
 		origin = agency + ":Quay:" + originStopID
@@ -44,7 +43,6 @@ func (c *Converter) buildMVJ(tripID string) siri.MonitoredVehicleJourney {
 	}
 
 	destStopID := c.gtfs.GetDestinationStopIDForTrip(tripID)
-	destStopID = applyFieldMutators(destStopID, c.opts.FieldMutators.DestinationRef)
 	dest := ""
 	if destStopID != "" && agency != "" {
 		dest = agency + ":Quay:" + destStopID
@@ -187,21 +185,6 @@ func (c *Converter) CfGDatedVehicleJourneyRef(tripKey, agency string) string {
 	return c.gtfs.GetFullTripIDForTrip(tripKey)
 }
 
-// applyFieldMutators applies [from,to] pairs to a reference value
-func applyFieldMutators(value string, mapping []string) string {
-	if len(mapping) < 2 {
-		return value
-	}
-	for i := 0; i+1 < len(mapping); i += 2 {
-		from := mapping[i]
-		to := mapping[i+1]
-		if value == from {
-			return to
-		}
-	}
-	return value
-}
-
 // calculateDelay calculates delay as ISO 8601 duration string (SIRI-VM spec: required)
 // Compares GTFS-RT expected time with GTFS static scheduled time for the next/current stop
 func (c *Converter) calculateDelay(tripID string) string {
@@ -332,7 +315,6 @@ func (c *Converter) buildMonitoredCall(tripID string) *siri.MonitoredCall {
 	}
 
 	// Format StopPointRef as {codespace}:Quay:{stopid}
-	currentStopID = applyFieldMutators(currentStopID, c.opts.FieldMutators.StopPointRef)
 	stopPointRef := ""
 	if currentStopID != "" && agency != "" {
 		stopPointRef = agency + ":Quay:" + currentStopID
