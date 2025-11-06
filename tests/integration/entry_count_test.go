@@ -1,11 +1,12 @@
 package integration
 
 import (
+	"os"
 	"testing"
 
 	gtfsrtpb "github.com/MobilityData/gtfs-realtime-bindings/golang/gtfs"
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/converter"
-	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/siri"
+	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/gtfsrt"
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/tests/helpers"
 	"google.golang.org/protobuf/proto"
 )
@@ -15,7 +16,6 @@ import (
 func TestVM_EntryCount(t *testing.T) {
 	// Load test data
 	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip", "SOFIA")
-	gtfsrtData := helpers.LoadGTFSRTFromLocal(t)
 
 	// Count input VehiclePositions
 	vpData, err := helpers.LoadProtobufFile("vehicle-positions.pbf")
@@ -28,6 +28,21 @@ func TestVM_EntryCount(t *testing.T) {
 	}
 	inputCount := len(vpFeed.Entity)
 
+	// Load GTFS-RT data from testdata
+	paths := helpers.DefaultTestDataPaths()
+	tuData, err := os.ReadFile(paths.TripUpdates)
+	if err != nil {
+		t.Fatalf("Failed to load trip updates: %v", err)
+	}
+	saData, err := os.ReadFile(paths.ServiceAlerts)
+	if err != nil {
+		t.Fatalf("Failed to load alerts: %v", err)
+	}
+	gtfsrtData, err := gtfsrt.NewGTFSRTWrapper(tuData, vpData, saData)
+	if err != nil {
+		t.Fatalf("Failed to create GTFS-RT wrapper: %v", err)
+	}
+
 	// Generate VM response
 	opts := helpers.DefaultConverterOptions("SOFIA")
 	c := converter.NewConverter(gtfsIndex, gtfsrtData, opts)
@@ -37,12 +52,12 @@ func TestVM_EntryCount(t *testing.T) {
 		t.Fatal("VM result should not be nil")
 	}
 
-	vm := result.Siri.ServiceDelivery.VehicleMonitoringDelivery
-	if len(vm) == 0 {
+	if len(result.VehicleMonitoringDelivery) == 0 {
 		t.Fatal("Should have at least one VehicleMonitoringDelivery")
 	}
 
-	outputCount := len(vm[0].VehicleActivity)
+	delivery := result.VehicleMonitoringDelivery[0]
+	outputCount := len(delivery.VehicleActivity)
 
 	// Verify counts match
 	if outputCount != inputCount {
@@ -58,7 +73,6 @@ func TestVM_EntryCount(t *testing.T) {
 func TestET_EntryCount(t *testing.T) {
 	// Load test data
 	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip", "SOFIA")
-	gtfsrtData := helpers.LoadGTFSRTFromLocal(t)
 
 	// Count input TripUpdates
 	tuData, err := helpers.LoadProtobufFile("trip-updates.pbf")
@@ -70,6 +84,21 @@ func TestET_EntryCount(t *testing.T) {
 		t.Fatalf("Failed to parse trip updates: %v", err)
 	}
 	inputCount := len(tuFeed.Entity)
+
+	// Load GTFS-RT data from testdata
+	paths := helpers.DefaultTestDataPaths()
+	vpData, err := os.ReadFile(paths.VehiclePositions)
+	if err != nil {
+		t.Fatalf("Failed to load vehicle positions: %v", err)
+	}
+	saData, err := os.ReadFile(paths.ServiceAlerts)
+	if err != nil {
+		t.Fatalf("Failed to load alerts: %v", err)
+	}
+	gtfsrtData, err := gtfsrt.NewGTFSRTWrapper(tuData, vpData, saData)
+	if err != nil {
+		t.Fatalf("Failed to create GTFS-RT wrapper: %v", err)
+	}
 
 	// Generate ET response
 	opts := helpers.DefaultConverterOptions("SOFIA")
@@ -109,7 +138,6 @@ func TestET_EntryCount(t *testing.T) {
 func TestSX_EntryCount(t *testing.T) {
 	// Load test data
 	gtfsIndex := helpers.MustLoadTestGTFS("sofia-static.zip", "SOFIA")
-	gtfsrtData := helpers.LoadGTFSRTFromLocal(t)
 
 	// Count input Alerts
 	saData, err := helpers.LoadProtobufFile("alerts.pbf")
@@ -122,17 +150,27 @@ func TestSX_EntryCount(t *testing.T) {
 	}
 	inputCount := len(saFeed.Entity)
 
+	// Load GTFS-RT data from testdata
+	paths := helpers.DefaultTestDataPaths()
+	tuData, err := os.ReadFile(paths.TripUpdates)
+	if err != nil {
+		t.Fatalf("Failed to load trip updates: %v", err)
+	}
+	vpData, err := os.ReadFile(paths.VehiclePositions)
+	if err != nil {
+		t.Fatalf("Failed to load vehicle positions: %v", err)
+	}
+	gtfsrtData, err := gtfsrt.NewGTFSRTWrapper(tuData, vpData, saData)
+	if err != nil {
+		t.Fatalf("Failed to create GTFS-RT wrapper: %v", err)
+	}
+
 	// Generate SX response
 	opts := helpers.DefaultConverterOptions("SOFIA")
 	c := converter.NewConverter(gtfsIndex, gtfsrtData, opts)
 	result := c.BuildSituationExchange()
 
-	situations, ok := result.Situations.([]siri.PtSituationElement)
-	if !ok {
-		t.Fatalf("Expected []siri.PtSituationElement in Situations field, got %T", result.Situations)
-	}
-
-	outputCount := len(situations)
+	outputCount := len(result.Situations)
 
 	// Verify counts match
 	if outputCount != inputCount {

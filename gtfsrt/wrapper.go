@@ -26,11 +26,12 @@ type GTFSRTWrapper struct {
 	etdByStop      map[string]map[string]int64 // trip_id -> stop_id -> departure epoch
 	schedRelByStop map[string]map[string]int32 // trip_id -> stop_id -> schedule_relationship (0=SCHEDULED, 1=SKIPPED, etc.)
 
-	tripVehicleRef map[string]string  // trip_id -> vehicle id
-	tripLat        map[string]float64 // trip_id -> lat
-	tripLon        map[string]float64 // trip_id -> lon
-	tripBearing    map[string]float64 // trip_id -> bearing
-	tripSpeed      map[string]float64 // trip_id -> speed (m/s)
+	tripVehicleRef  map[string]string  // trip_id -> vehicle id
+	tripLat         map[string]float64 // trip_id -> lat
+	tripLon         map[string]float64 // trip_id -> lon
+	tripBearing     map[string]float64 // trip_id -> bearing
+	tripSpeed       map[string]float64 // trip_id -> speed (m/s)
+	tripCurrentStop map[string]string  // trip_id -> current/next stop_id (from VehiclePosition)
 
 	// Occupancy and congestion data
 	tripOccupancy  map[string]int32 // trip_id -> occupancy_status (from TripUpdate)
@@ -54,28 +55,29 @@ type GTFSRTWrapper struct {
 //	wrapper, err := gtfsrt.NewGTFSRTWrapper(tuBytes, vpBytes, saBytes)
 func NewGTFSRTWrapper(tripUpdatesData, vehiclePositionsData, serviceAlertsData []byte) (*GTFSRTWrapper, error) {
 	wrapper := &GTFSRTWrapper{
-		trips:          map[string]struct{}{},
-		tripsFromTU:    map[string]struct{}{},
-		tripsFromVP:    map[string]struct{}{},
-		vehicleTS:      map[string]int64{},
-		schedRelByStop: map[string]map[string]int32{},
-		tripRoute:      map[string]string{},
-		tripDir:        map[string]string{},
-		tripDate:       map[string]string{},
-		onwardStops:    map[string][]string{},
-		etaByStop:      map[string]map[string]int64{},
-		etdByStop:      map[string]map[string]int64{},
-		tripVehicleRef: map[string]string{},
-		tripLat:        map[string]float64{},
-		tripLon:        map[string]float64{},
-		tripBearing:    map[string]float64{},
-		tripSpeed:      map[string]float64{},
-		tripOccupancy:  map[string]int32{},
-		tripCongestion: map[string]int32{},
-		alerts:         []RTAlert{},
-		alertsByRoute:  map[string][]int{},
-		alertsByStop:   map[string][]int{},
-		alertsByTrip:   map[string][]int{},
+		trips:           map[string]struct{}{},
+		tripsFromTU:     map[string]struct{}{},
+		tripsFromVP:     map[string]struct{}{},
+		vehicleTS:       map[string]int64{},
+		schedRelByStop:  map[string]map[string]int32{},
+		tripRoute:       map[string]string{},
+		tripDir:         map[string]string{},
+		tripDate:        map[string]string{},
+		onwardStops:     map[string][]string{},
+		etaByStop:       map[string]map[string]int64{},
+		etdByStop:       map[string]map[string]int64{},
+		tripVehicleRef:  map[string]string{},
+		tripLat:         map[string]float64{},
+		tripLon:         map[string]float64{},
+		tripBearing:     map[string]float64{},
+		tripSpeed:       map[string]float64{},
+		tripCurrentStop: map[string]string{},
+		tripOccupancy:   map[string]int32{},
+		tripCongestion:  map[string]int32{},
+		alerts:          []RTAlert{},
+		alertsByRoute:   map[string][]int{},
+		alertsByStop:    map[string][]int{},
+		alertsByTrip:    map[string][]int{},
 	}
 
 	// Parse trip updates
@@ -160,6 +162,10 @@ func TripKeyForConverter(tripID, agency, startDate string) string {
 func (w *GTFSRTWrapper) GetRouteIDForTrip(tripID string) string         { return w.tripRoute[tripID] }
 func (w *GTFSRTWrapper) GetRouteDirectionForTrip(tripID string) string  { return w.tripDir[tripID] }
 func (w *GTFSRTWrapper) GetOnwardStopIDsForTrip(tripID string) []string { return w.onwardStops[tripID] }
+
+func (w *GTFSRTWrapper) GetCurrentStopIDForTrip(tripID string) string {
+	return w.tripCurrentStop[tripID]
+}
 
 func (w *GTFSRTWrapper) GetExpectedArrivalTimeAtStopForTrip(tripID, stopID string) int64 {
 	if m := w.etaByStop[tripID]; m != nil {
@@ -369,6 +375,9 @@ func (w *GTFSRTWrapper) parseVehiclePositionsFeed(fm *gtfsrtpb.FeedMessage) {
 			}
 			if e.Vehicle.Timestamp != nil && tripID != "" {
 				w.vehicleTS[tripID] = int64(*e.Vehicle.Timestamp)
+			}
+			if e.Vehicle.StopId != nil && tripID != "" {
+				w.tripCurrentStop[tripID] = *e.Vehicle.StopId
 			}
 		}
 	}

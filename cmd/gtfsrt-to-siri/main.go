@@ -3,8 +3,10 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/config"
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/converter"
@@ -108,15 +110,23 @@ func main() {
 		gtfsCfg = config.Config.GTFS
 	}
 
+	// Performance metrics
+	totalStart := time.Now()
+
 	// Fetch GTFS static data
+	gtfsStart := time.Now()
 	gtfsBytes, err := gtfs.FetchGTFSData(gtfsCfg.StaticURL)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to fetch GTFS: %v", err))
 	}
+	gtfsFetchDuration := time.Since(gtfsStart)
+
+	gtfsParseStart := time.Now()
 	gtfsIndex, err := gtfs.NewGTFSIndexFromBytes(gtfsBytes, gtfsCfg.AgencyID)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to parse GTFS: %v", err))
 	}
+	gtfsParseDuration := time.Since(gtfsParseStart)
 
 	// Determine which modules are available based on URLs
 	includeTU := tu != ""
@@ -124,17 +134,21 @@ func main() {
 	includeAlerts := alertsURL != ""
 
 	// Fetch GTFS-RT data as raw bytes
+	gtfsrtFetchStart := time.Now()
 	f := newFetcher()
 	tuBytes, vpBytes, alertBytes, err := f.fetchAll(tu, vp, alertsURL)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to fetch GTFS-RT: %v", err))
 	}
+	gtfsrtFetchDuration := time.Since(gtfsrtFetchStart)
 
 	// Create GTFS-RT wrapper from raw bytes
+	gtfsrtParseStart := time.Now()
 	rt, err := gtfsrt.NewGTFSRTWrapper(tuBytes, vpBytes, alertBytes)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to parse GTFS-RT: %v", err))
 	}
+	gtfsrtParseDuration := time.Since(gtfsrtParseStart)
 
 	// Create converter with options from config
 	opts := converter.ConverterOptions{
@@ -146,43 +160,59 @@ func main() {
 
 	// Generate all applicable SIRI formats based on available modules
 	var outputs []string
+	var conversionDuration, formattingDuration time.Duration
 
 	// VM: requires both TU and VP
 	if includeTU && includeVP {
+		conversionStart := time.Now()
 		resp := conv.GetCompleteVehicleMonitoringResponse()
+		conversionDuration += time.Since(conversionStart)
+
+		formattingStart := time.Now()
 		var buf []byte
 		if strings.ToLower(*format) == "xml" {
 			buf = rb.BuildXML(resp)
 		} else {
 			buf = rb.BuildJSON(resp)
 		}
+		formattingDuration += time.Since(formattingStart)
 		outputs = append(outputs, fmt.Sprintf("<!-- Vehicle Monitoring -->\n%s", string(buf)))
 	}
 
 	// ET: requires TU (with or without VP)
 	if includeTU {
+		conversionStart := time.Now()
 		et := conv.BuildEstimatedTimetable()
 		resp := formatter.WrapEstimatedTimetableResponse(et, codespace)
+		conversionDuration += time.Since(conversionStart)
+
+		formattingStart := time.Now()
 		var buf []byte
 		if strings.ToLower(*format) == "xml" {
 			buf = rb.BuildXML(resp)
 		} else {
 			buf = rb.BuildJSON(resp)
 		}
+		formattingDuration += time.Since(formattingStart)
 		outputs = append(outputs, fmt.Sprintf("<!-- Estimated Timetable -->\n%s", string(buf)))
 	}
 
 	// SX: requires alerts
 	if includeAlerts {
+		conversionStart := time.Now()
 		sx := conv.BuildSituationExchange()
 		timestamp := rt.GetTimestampForFeedMessage()
 		resp := formatter.WrapSituationExchangeResponse(sx, timestamp, codespace)
+		conversionDuration += time.Since(conversionStart)
+
+		formattingStart := time.Now()
 		var buf []byte
 		if strings.ToLower(*format) == "xml" {
 			buf = rb.BuildXML(resp)
 		} else {
 			buf = rb.BuildJSON(resp)
 		}
+		formattingDuration += time.Since(formattingStart)
 		outputs = append(outputs, fmt.Sprintf("<!-- Situation Exchange -->\n%s", string(buf)))
 	}
 
@@ -191,8 +221,22 @@ func main() {
 		panic("No valid module combination. Use: tu (ET), alerts (SX), or tu,vp (VM+ET)")
 	}
 
+	totalDuration := time.Since(totalStart)
+	outputSize := 0
 	for _, output := range outputs {
+		outputSize += len(output)
 		fmt.Println(output)
 		fmt.Println() // Separator between formats
 	}
+
+	// Log performance metrics
+	log.Printf("Performance metrics:")
+	log.Printf("  GTFS static fetch:  %v (%.0f ms)", gtfsFetchDuration, gtfsFetchDuration.Seconds()*1000)
+	log.Printf("  GTFS static parse:  %v (%.0f ms)", gtfsParseDuration, gtfsParseDuration.Seconds()*1000)
+	log.Printf("  GTFS-RT fetch:      %v (%.0f ms)", gtfsrtFetchDuration, gtfsrtFetchDuration.Seconds()*1000)
+	log.Printf("  GTFS-RT parse:      %v (%.0f ms)", gtfsrtParseDuration, gtfsrtParseDuration.Seconds()*1000)
+	log.Printf("  Conversion:         %v (%.0f ms)", conversionDuration, conversionDuration.Seconds()*1000)
+	log.Printf("  Formatting (%s):    %v (%.0f ms)", *format, formattingDuration, formattingDuration.Seconds()*1000)
+	log.Printf("  Total:              %v (%.0f ms)", totalDuration, totalDuration.Seconds()*1000)
+	log.Printf("  Output size:        %d bytes (%.2f KB)", outputSize, float64(outputSize)/1024.0)
 }

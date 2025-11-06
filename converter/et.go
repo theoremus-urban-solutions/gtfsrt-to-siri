@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/siri"
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/utils"
+	"github.com/theoremus-urban-solutions/transit-types/siri"
 )
 
 // BuildEstimatedTimetable converts GTFS-RT data to SIRI ET format
-func (c *Converter) BuildEstimatedTimetable() siri.EstimatedTimetable {
+func (c *Converter) BuildEstimatedTimetable() siri.EstimatedTimetableDelivery {
 	timestamp := c.gtfsrt.GetTimestampForFeedMessage()
 	now := timestamp
 	agencyID := c.opts.AgencyID
@@ -36,7 +36,8 @@ func (c *Converter) BuildEstimatedTimetable() siri.EstimatedTimetable {
 	// Log consolidated warnings
 	c.warnings.LogAll("TU->ET", agencyID)
 
-	return siri.EstimatedTimetable{
+	return siri.EstimatedTimetableDelivery{
+		Version:                      "2.0",
 		ResponseTimestamp:            utils.Iso8601ExtendedFromUnixSeconds(timestamp),
 		EstimatedJourneyVersionFrame: []siri.EstimatedJourneyVersionFrame{frame},
 	}
@@ -94,7 +95,7 @@ func (c *Converter) buildEstimatedVehicleJourney(tripID string, now int64, agenc
 
 	// Get VehicleMode from route_type
 	vehicleMode := ""
-	if routeType := c.gtfs.GetRouteType(routeID); routeType > 0 {
+	if routeType, exists := c.gtfs.GetRouteTypeWithExists(routeID); exists {
 		vehicleMode = mapGTFSRouteTypeToSIRIVehicleMode(routeType)
 	} else if routeID != "UNKNOWN" {
 		c.warnings.Add(WarningNoRouteType, tripID+":"+routeID)
