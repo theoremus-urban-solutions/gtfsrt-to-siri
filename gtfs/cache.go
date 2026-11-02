@@ -51,7 +51,7 @@ func DeserializeIndex(data []byte) (*GTFSIndex, error) {
 	if err := decoder.Decode(&index); err != nil {
 		return nil, fmt.Errorf("failed to decode GTFSIndex: %w", err)
 	}
-	return &index, nil
+	return checkDecoded(&index)
 }
 
 // SerializeIndexToFile writes a GTFSIndex to a file using gob encoding.
@@ -125,5 +125,13 @@ func DeserializeIndexFromReader(r io.Reader) (*GTFSIndex, error) {
 	if err := decoder.Decode(&index); err != nil {
 		return nil, fmt.Errorf("failed to decode GTFSIndex: %w", err)
 	}
-	return &index, nil
+	return checkDecoded(&index)
+}
+
+// checkDecoded rejects an index cached before stop times moved to TripStopTimes, which would decode with no stop times.
+func checkDecoded(index *GTFSIndex) (*GTFSIndex, error) {
+	if len(index.TripStopSeq) > 0 && len(index.TripStopTimes) == 0 {
+		return nil, fmt.Errorf("cached GTFSIndex has an older format without TripStopTimes; rebuild it")
+	}
+	return index, nil
 }

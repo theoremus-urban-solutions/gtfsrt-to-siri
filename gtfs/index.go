@@ -10,23 +10,22 @@ package gtfs
 // Thread safety: GTFSIndex is safe for concurrent read access after construction.
 // Multiple goroutines can safely read from a shared GTFSIndex instance.
 type GTFSIndex struct {
-	AgencyID        string                             // Agency ID from config or agency.txt
-	AgencyTZ        string                             // Agency timezone from agency.txt
-	AgencyName      string                             // Agency name from agency.txt
-	RouteShortNames map[string]string                  // route_id -> short_name
-	RouteTypes      map[string]int                     // route_id -> route_type (GTFS enum)
-	Routes          map[string]struct{}                // route existence set
-	TripToRoute     map[string]string                  // trip_id -> route_id
-	TripHeadsign    map[string]string                  // trip_id -> headsign
-	TripOriginStop  map[string]string                  // trip_id -> first stop_id
-	TripDestStop    map[string]string                  // trip_id -> last stop_id
-	TripDirection   map[string]string                  // trip_id -> direction_id ("0"|"1")
-	TripBlockID     map[string]string                  // trip_id -> block_id
-	TripStopSeq     map[string][]string                // trip_id -> ordered stop_ids (exported for caching)
-	TripStopIdx     map[string]map[string]int          // trip_id -> stop_id -> index
-	StopNames       map[string]string                  // stop_id -> name
-	StopCoord       map[string][2]float64              // stop_id -> [lon,lat] (exported for caching)
-	StopTimes       map[string]map[string]StopTime     // trip_id -> stop_id -> StopTime (for ET support)
+	AgencyID        string                // Agency ID from config or agency.txt
+	AgencyTZ        string                // Agency timezone from agency.txt
+	AgencyName      string                // Agency name from agency.txt
+	RouteShortNames map[string]string     // route_id -> short_name
+	RouteTypes      map[string]int        // route_id -> route_type (GTFS enum)
+	Routes          map[string]struct{}   // route existence set
+	TripToRoute     map[string]string     // trip_id -> route_id
+	TripHeadsign    map[string]string     // trip_id -> headsign
+	TripOriginStop  map[string]string     // trip_id -> first stop_id
+	TripDestStop    map[string]string     // trip_id -> last stop_id
+	TripDirection   map[string]string     // trip_id -> direction_id ("0"|"1")
+	TripBlockID     map[string]string     // trip_id -> block_id
+	TripStopSeq     map[string][]string   // trip_id -> ordered stop_ids (exported for caching)
+	TripStopTimes   map[string][]StopTime // trip_id -> stop times, same order as TripStopSeq
+	StopNames       map[string]string     // stop_id -> name
+	StopCoord       map[string][2]float64 // stop_id -> [lon,lat] (exported for caching)
 }
 
 // Accessor methods
@@ -65,10 +64,11 @@ func (g *GTFSIndex) GetAgencyName() string { return g.AgencyName }
 func (g *GTFSIndex) GetStopName(stopID string) string { return g.StopNames[stopID] }
 
 func (g *GTFSIndex) GetPreviousStopIDOfStopForTrip(gtfsTripKey, stopID string) string {
-	if m, ok := g.TripStopIdx[gtfsTripKey]; ok {
-		if idx, ok2 := m[stopID]; ok2 {
-			if idx > 0 {
-				return g.TripStopSeq[gtfsTripKey][idx-1]
+	seq := g.TripStopSeq[gtfsTripKey]
+	for i, s := range seq {
+		if s == stopID {
+			if i > 0 {
+				return seq[i-1]
 			}
 			return ""
 		}
@@ -76,44 +76,39 @@ func (g *GTFSIndex) GetPreviousStopIDOfStopForTrip(gtfsTripKey, stopID string) s
 	return ""
 }
 
-// GetPickupType returns the pickup_type for a stop in a trip (0=regular, 1=none, 2=phone, 3=coordinate)
-func (g *GTFSIndex) GetPickupType(gtfsTripKey, stopID string) int {
-	if m, ok := g.StopTimes[gtfsTripKey]; ok {
-		if st, ok2 := m[stopID]; ok2 {
-			return int(st.PickupType)
+// stopTime returns the trip's stop time at the last visit of stopID.
+func (g *GTFSIndex) stopTime(gtfsTripKey, stopID string) (StopTime, bool) {
+	seq, times := g.TripStopSeq[gtfsTripKey], g.TripStopTimes[gtfsTripKey]
+	for i := len(seq) - 1; i >= 0; i-- {
+		if seq[i] == stopID && i < len(times) {
+			return times[i], true
 		}
 	}
-	return 0 // Default: regular pickup
+	return StopTime{}, false
+}
+
+// GetPickupType returns the pickup_type for a stop in a trip (0=regular, 1=none, 2=phone, 3=coordinate)
+func (g *GTFSIndex) GetPickupType(gtfsTripKey, stopID string) int {
+	st, _ := g.stopTime(gtfsTripKey, stopID)
+	return int(st.PickupType)
 }
 
 // GetDropOffType returns the drop_off_type for a stop in a trip (0=regular, 1=none, 2=phone, 3=coordinate)
 func (g *GTFSIndex) GetDropOffType(gtfsTripKey, stopID string) int {
-	if m, ok := g.StopTimes[gtfsTripKey]; ok {
-		if st, ok2 := m[stopID]; ok2 {
-			return int(st.DropOffType)
-		}
-	}
-	return 0 // Default: regular drop off
+	st, _ := g.stopTime(gtfsTripKey, stopID)
+	return int(st.DropOffType)
 }
 
 // GetArrivalTime returns the static arrival_time string (HH:MM:SS) for a stop in a trip
 func (g *GTFSIndex) GetArrivalTime(gtfsTripKey, stopID string) string {
-	if m, ok := g.StopTimes[gtfsTripKey]; ok {
-		if st, ok2 := m[stopID]; ok2 {
-			return st.ArrivalTime
-		}
-	}
-	return ""
+	st, _ := g.stopTime(gtfsTripKey, stopID)
+	return st.ArrivalTime
 }
 
 // GetDepartureTime returns the static departure_time string (HH:MM:SS) for a stop in a trip
 func (g *GTFSIndex) GetDepartureTime(gtfsTripKey, stopID string) string {
-	if m, ok := g.StopTimes[gtfsTripKey]; ok {
-		if st, ok2 := m[stopID]; ok2 {
-			return st.DepartureTime
-		}
-	}
-	return ""
+	st, _ := g.stopTime(gtfsTripKey, stopID)
+	return st.DepartureTime
 }
 
 func (g *GTFSIndex) TripIsAScheduledTrip(gtfsTripKey string) bool {

@@ -75,10 +75,9 @@ func NewGTFSIndexFromReader(r io.ReaderAt, size int64, agencyID string) (*GTFSIn
 		TripDirection:   map[string]string{},
 		TripBlockID:     map[string]string{},
 		TripStopSeq:     map[string][]string{},
-		TripStopIdx:     map[string]map[string]int{},
+		TripStopTimes:   map[string][]StopTime{},
 		StopNames:       map[string]string{},
 		StopCoord:       map[string][2]float64{},
-		StopTimes:       map[string]map[string]StopTime{},
 	}
 
 	// Parse GTFS files from zip
@@ -91,11 +90,12 @@ func NewGTFSIndexFromReader(r io.ReaderAt, size int64, agencyID string) (*GTFSIn
 
 // parseGTFSFiles reads all required GTFS files from zip
 func (g *GTFSIndex) parseGTFSFiles(zipReader *zip.Reader) error {
+	in := interner{}
 	for _, f := range zipReader.File {
 		name := strings.ToLower(f.Name)
 		if name == "routes.txt" || name == "trips.txt" || name == "stops.txt" ||
 			name == "stop_times.txt" || name == "agency.txt" {
-			if err := g.consumeCSV(f); err != nil {
+			if err := g.consumeCSV(f, in); err != nil {
 				return err
 			}
 		}
@@ -104,9 +104,19 @@ func (g *GTFSIndex) parseGTFSFiles(zipReader *zip.Reader) error {
 	return nil
 }
 
-// Utility converters for flexible JSON values
+// interner keeps one copy of each repeated value so kept strings do not pin whole CSV lines.
+type interner map[string]string
 
-func (g *GTFSIndex) consumeCSV(f *zip.File) error {
+func (in interner) get(v string) string {
+	if s, ok := in[v]; ok {
+		return s
+	}
+	s := strings.Clone(v)
+	in[s] = s
+	return s
+}
+
+func (g *GTFSIndex) consumeCSV(f *zip.File, in interner) error {
 	r, err := f.Open()
 	if err != nil {
 		return err
@@ -114,14 +124,15 @@ func (g *GTFSIndex) consumeCSV(f *zip.File) error {
 	defer func() { _ = r.Close() }()
 	csvr := csv.NewReader(r)
 	csvr.LazyQuotes = true // Handle malformed CSV with quotes
-	rec, err := csvr.ReadAll()
+	csvr.ReuseRecord = true
+	first, err := csvr.Read()
+	if err == io.EOF {
+		return nil
+	}
 	if err != nil {
 		return err
 	}
-	if len(rec) == 0 {
-		return nil
-	}
-	head := rec[0]
+	head := append([]string(nil), first...)
 	// Strip UTF-8 BOM from first column header if present
 	if len(head) > 0 {
 		head[0] = strings.TrimPrefix(head[0], "\ufeff")
@@ -134,56 +145,73 @@ func (g *GTFSIndex) consumeCSV(f *zip.File) error {
 		}
 		return -1
 	}
+	// rows calls fn for each data row; the row slice is reused between calls.
+	rows := func(fn func(row []string)) error {
+		for {
+			row, err := csvr.Read()
+			if err == io.EOF {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+			fn(row)
+		}
+	}
 	switch strings.ToLower(f.Name) {
 	case "routes.txt":
 		rID := idx("route_id")
 		rSN := idx("route_short_name")
 		rType := idx("route_type")
-		for _, row := range rec[1:] {
+		return rows(func(row []string) {
 			if rID >= 0 && rSN >= 0 {
-				g.RouteShortNames[row[rID]] = row[rSN]
+				g.RouteShortNames[in.get(row[rID])] = in.get(row[rSN])
 			}
 			if rID >= 0 && rType >= 0 {
 				if typeInt, err := strconv.Atoi(row[rType]); err == nil {
-					g.RouteTypes[row[rID]] = typeInt
+					g.RouteTypes[in.get(row[rID])] = typeInt
 				}
 			}
-		}
+		})
 	case "trips.txt":
 		rID := idx("route_id")
 		tID := idx("trip_id")
 		hs := idx("trip_headsign")
 		dir := idx("direction_id")
 		blk := idx("block_id")
-		for _, row := range rec[1:] {
-			if tID >= 0 && rID >= 0 {
-				g.TripToRoute[row[tID]] = row[rID]
+		return rows(func(row []string) {
+			if tID < 0 {
+				return
 			}
-			if tID >= 0 && hs >= 0 {
-				g.TripHeadsign[row[tID]] = row[hs]
+			trip := in.get(row[tID])
+			if rID >= 0 {
+				g.TripToRoute[trip] = in.get(row[rID])
 			}
-			if tID >= 0 && dir >= 0 {
-				g.TripDirection[row[tID]] = row[dir]
+			if hs >= 0 {
+				g.TripHeadsign[trip] = in.get(row[hs])
 			}
-			if tID >= 0 && blk >= 0 {
-				g.TripBlockID[row[tID]] = row[blk]
+			if dir >= 0 {
+				g.TripDirection[trip] = in.get(row[dir])
 			}
-		}
+			if blk >= 0 {
+				g.TripBlockID[trip] = in.get(row[blk])
+			}
+		})
 	case "stops.txt":
 		sID := idx("stop_id")
 		sN := idx("stop_name")
 		sLat := idx("stop_lat")
 		sLon := idx("stop_lon")
-		for _, row := range rec[1:] {
+		return rows(func(row []string) {
 			if sID >= 0 && sN >= 0 {
-				g.StopNames[row[sID]] = row[sN]
+				g.StopNames[in.get(row[sID])] = in.get(row[sN])
 			}
 			if sID >= 0 && sLat >= 0 && sLon >= 0 {
 				lat, _ := strconv.ParseFloat(row[sLat], 64)
 				lon, _ := strconv.ParseFloat(row[sLon], 64)
-				g.StopCoord[row[sID]] = [2]float64{lon, lat}
+				g.StopCoord[in.get(row[sID])] = [2]float64{lon, lat}
 			}
-		}
+		})
 	case "stop_times.txt":
 		tID := idx("trip_id")
 		sID := idx("stop_id")
@@ -195,86 +223,71 @@ func (g *GTFSIndex) consumeCSV(f *zip.File) error {
 		if tID < 0 || sID < 0 || sq < 0 {
 			return nil
 		}
-		tmp := map[string][]struct {
-			stop        string
-			seq         int
-			arrTime     string
-			depTime     string
-			pickupType  int
-			dropOffType int
-		}{}
-		for _, row := range rec[1:] {
-			trip := row[tID]
-			stop := row[sID]
+		type stopRow struct {
+			stop string
+			seq  int
+			st   StopTime
+		}
+		tmp := map[string][]stopRow{}
+		err := rows(func(row []string) {
 			seq, _ := strconv.Atoi(row[sq])
-			arrT := ""
+			var st StopTime
 			if arrTime >= 0 && arrTime < len(row) {
-				arrT = row[arrTime]
+				st.ArrivalTime = in.get(row[arrTime])
 			}
-			depT := ""
 			if depTime >= 0 && depTime < len(row) {
-				depT = row[depTime]
+				st.DepartureTime = in.get(row[depTime])
 			}
-			pickup := 0
 			if pickupType >= 0 && pickupType < len(row) && row[pickupType] != "" {
-				pickup, _ = strconv.Atoi(row[pickupType])
+				pickup, _ := strconv.Atoi(row[pickupType])
+				st.PickupType = int8(pickup)
 			}
-			dropOff := 0
 			if dropOffType >= 0 && dropOffType < len(row) && row[dropOffType] != "" {
-				dropOff, _ = strconv.Atoi(row[dropOffType])
+				dropOff, _ := strconv.Atoi(row[dropOffType])
+				st.DropOffType = int8(dropOff)
 			}
-			tmp[trip] = append(tmp[trip], struct {
-				stop        string
-				seq         int
-				arrTime     string
-				depTime     string
-				pickupType  int
-				dropOffType int
-			}{stop, seq, arrT, depT, pickup, dropOff})
+			trip := in.get(row[tID])
+			tmp[trip] = append(tmp[trip], stopRow{stop: in.get(row[sID]), seq: seq, st: st})
+		})
+		if err != nil {
+			return err
 		}
 		for trip, arr := range tmp {
 			sort.Slice(arr, func(i, j int) bool { return arr[i].seq < arr[j].seq })
-			// first/last
 			if len(arr) > 0 {
 				g.TripOriginStop[trip] = arr[0].stop
 				g.TripDestStop[trip] = arr[len(arr)-1].stop
 			}
-			// Initialize map for this trip
-			g.StopTimes[trip] = make(map[string]StopTime)
-			// stop sequence + index map + stop times data
-			seqStops := make([]string, 0, len(arr))
-			idxMap := make(map[string]int, len(arr))
+			seqStops := make([]string, len(arr))
+			times := make([]StopTime, len(arr))
 			for i, v := range arr {
-				seqStops = append(seqStops, v.stop)
-				if _, ok := idxMap[v.stop]; !ok {
-					idxMap[v.stop] = i
-				}
-				// Store stop time data in consolidated struct
-				g.StopTimes[trip][v.stop] = StopTime{
-					ArrivalTime:   v.arrTime,
-					DepartureTime: v.depTime,
-					PickupType:    int8(v.pickupType),
-					DropOffType:   int8(v.dropOffType),
-				}
+				seqStops[i] = v.stop
+				times[i] = v.st
 			}
 			g.TripStopSeq[trip] = seqStops
-			g.TripStopIdx[trip] = idxMap
+			g.TripStopTimes[trip] = times
 		}
 	case "agency.txt":
 		agID := idx("agency_id")
 		agTZ := idx("agency_timezone")
 		agName := idx("agency_name")
-		if len(rec) > 1 {
-			if agID >= 0 && g.AgencyID == "" {
-				g.AgencyID = rec[1][agID]
-			}
-			if agTZ >= 0 {
-				g.AgencyTZ = rec[1][agTZ]
-			}
-			if agName >= 0 {
-				g.AgencyName = rec[1][agName]
-			}
+		row, err := csvr.Read()
+		if err == io.EOF {
+			return nil
 		}
+		if err != nil {
+			return err
+		}
+		if agID >= 0 && g.AgencyID == "" {
+			g.AgencyID = strings.Clone(row[agID])
+		}
+		if agTZ >= 0 {
+			g.AgencyTZ = strings.Clone(row[agTZ])
+		}
+		if agName >= 0 {
+			g.AgencyName = strings.Clone(row[agName])
+		}
+		return rows(func([]string) {})
 	}
 	return nil
 }
