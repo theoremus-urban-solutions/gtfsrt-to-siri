@@ -660,13 +660,15 @@ func writeSituationExchangeXML(b *strings.Builder, sx siri.SituationExchangeDeli
 	b.WriteString("</SituationExchangeDelivery>")
 }
 
+// xmlReplacer is built once because building it per call dominated conversion cost.
+var xmlReplacer = strings.NewReplacer(
+	"&", "&amp;",
+	"<", "&lt;",
+	">", "&gt;",
+	"\"", "&quot;",
+	"'", "&apos;",
+)
+
 func xmlEscape(s string) string {
-	replacer := strings.NewReplacer(
-		"&", "&amp;",
-		"<", "&lt;",
-		">", "&gt;",
-		"\"", "&quot;",
-		"'", "&apos;",
-	)
-	return replacer.Replace(s)
+	return xmlReplacer.Replace(s)
 }
