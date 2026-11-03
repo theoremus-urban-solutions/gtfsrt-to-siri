@@ -91,6 +91,11 @@ func (c *Converter) GetCompleteVehicleMonitoringResponse() *utils.SiriResponse {
 		VehicleActivity:   []siri.VehicleActivity{},
 	}
 
+	readIntervalMS := c.opts.ReadIntervalMS
+	if readIntervalMS <= 0 {
+		readIntervalMS = DefaultReadIntervalMS
+	}
+
 	// Get trips from VehiclePositions only (VM should only include trips with position data)
 	trips := c.gtfsrt.GetTripsFromVehiclePositions()
 	for _, tripID := range trips {
@@ -98,6 +103,7 @@ func (c *Converter) GetCompleteVehicleMonitoringResponse() *utils.SiriResponse {
 		tripTimestamp := c.gtfsrt.GetTimestampForTrip(tripID)
 		entry := siri.VehicleActivity{
 			RecordedAtTime:          utils.Iso8601FromUnixSeconds(tripTimestamp),
+			ValidUntilTime:          utils.ValidUntilFrom(tripTimestamp, int(readIntervalMS)),
 			MonitoredVehicleJourney: &mvj,
 		}
 		vm.VehicleActivity = append(vm.VehicleActivity, entry)
