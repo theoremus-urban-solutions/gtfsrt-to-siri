@@ -87,8 +87,12 @@ func (c *Converter) buildMVJ(tripID string) siri.MonitoredVehicleJourney {
 
 	// siri.FramedVehicleJourneyRef with DataFrameRef (YYYY-MM-DD) and DatedVehicleJourneyRef ({codespace}:ServiceJourney:{tripID})
 	dataFrameRef := startDate
-	if len(startDate) == 8 { // YYYYMMDD -> YYYY-MM-DD
-		dataFrameRef = startDate[:4] + "-" + startDate[4:6] + "-" + startDate[6:8]
+	if dataFrameRef == "" {
+		// SIRI requires DataFrameRef before DatedVehicleJourneyRef; a trip without start_date runs on the feed's service day.
+		dataFrameRef = c.serviceDate(c.gtfsrt.GetTimestampForFeedMessage())
+	}
+	if len(dataFrameRef) == 8 { // YYYYMMDD -> YYYY-MM-DD
+		dataFrameRef = dataFrameRef[:4] + "-" + dataFrameRef[4:6] + "-" + dataFrameRef[6:8]
 	}
 	datedVehicleJourneyRef := agency + ":ServiceJourney:" + tripID
 
@@ -121,11 +125,7 @@ func (c *Converter) buildMVJ(tripID string) siri.MonitoredVehicleJourney {
 		vehicleMode = mapGTFSRouteTypeToSIRIVehicleMode(routeType)
 	}
 
-	// OperatorRef format: {codespace}:Operator:{operator_name}
-	operatorRef := agency
-	if agencyName := c.gtfs.GetAgencyName(); agencyName != "" {
-		operatorRef = agency + ":Operator:" + agencyName
-	}
+	operatorRef := c.operatorRef(agency)
 
 	monitored := true
 	framedRef := &siri.FramedVehicleJourneyRef{
@@ -187,8 +187,7 @@ func (c *Converter) calculateDelay(tripID string) string {
 	startDate := c.gtfsrt.GetStartDateForTrip(tripID)
 	// If no start_date from GTFS-RT, use today's date
 	if startDate == "" {
-		startDate = utils.Iso8601DateFromUnixSeconds(c.gtfsrt.GetTimestampForFeedMessage())
-		startDate = startDate[0:4] + startDate[5:7] + startDate[8:10] // Convert YYYY-MM-DD to YYYYMMDD
+		startDate = c.serviceDate(c.gtfsrt.GetTimestampForFeedMessage())
 	}
 
 	// Get expected time from GTFS-RT (prefer departure, fallback to arrival)
@@ -212,7 +211,7 @@ func (c *Converter) calculateDelay(tripID string) string {
 	}
 
 	// Convert GTFS static time to Unix seconds
-	scheduledTime := utils.ParseGTFSTimeToUnixSeconds(gtfsTime, startDate)
+	scheduledTime := utils.ParseGTFSTimeInLocation(gtfsTime, startDate, c.loc)
 	if scheduledTime == 0 {
 		return "PT0S" // Parsing failed
 	}

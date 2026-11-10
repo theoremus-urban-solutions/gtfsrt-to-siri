@@ -2,6 +2,10 @@ package converter
 
 import (
 	"encoding/json"
+	"sync"
+	"time"
+	// Embedded zone data, so agency timezones resolve in images without /usr/share/zoneinfo.
+	_ "time/tzdata"
 
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/gtfs"
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/gtfsrt"
@@ -18,6 +22,43 @@ type Converter struct {
 	opts     ConverterOptions
 	snap     *tracking.Snapshot
 	warnings *WarningAggregator
+	// loc is the agency timezone that GTFS schedule times are read in.
+	loc *time.Location
+}
+
+var agencyLocations sync.Map
+
+// operatorRef is {codespace}:Operator:{agency_id}, falling back to the agency name, made a valid SIRI code.
+func (c *Converter) operatorRef(codespace string) string {
+	id := c.gtfs.GetOperatorID()
+	if id == "" {
+		id = c.gtfs.GetAgencyName()
+	}
+	if id == "" {
+		return codespace
+	}
+	return utils.NMToken(codespace + ":Operator:" + id)
+}
+
+// serviceDate is the agency-local date of a Unix time as YYYYMMDD.
+func (c *Converter) serviceDate(unix int64) string {
+	return time.Unix(unix, 0).In(c.loc).Format("20060102")
+}
+
+// agencyLocation loads agency.txt's agency_timezone once per name, falling back to the process timezone when it is missing or unknown.
+func agencyLocation(idx *gtfs.GTFSIndex) *time.Location {
+	if idx == nil || idx.AgencyTZ == "" {
+		return time.Local
+	}
+	if l, ok := agencyLocations.Load(idx.AgencyTZ); ok {
+		return l.(*time.Location)
+	}
+	l, err := time.LoadLocation(idx.AgencyTZ)
+	if err != nil {
+		return time.Local
+	}
+	agencyLocations.Store(idx.AgencyTZ, l)
+	return l
 }
 
 // NewConverter creates a new converter instance.
@@ -42,6 +83,7 @@ func NewConverter(gtfsIdx *gtfs.GTFSIndex, rt *gtfsrt.GTFSRTWrapper, opts Conver
 		opts:     opts,
 		snap:     snap,
 		warnings: NewWarningAggregator(),
+		loc:      agencyLocation(gtfsIdx),
 	}
 }
 

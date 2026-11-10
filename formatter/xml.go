@@ -112,21 +112,13 @@ func writeMVJXML(b *strings.Builder, mvj siri.MonitoredVehicleJourney) {
 		b.WriteString(xmlEscape(mvj.OriginRef))
 		b.WriteString("</OriginRef>")
 	}
-	if mvj.OriginName != "" {
-		b.WriteString("<OriginName>")
-		b.WriteString(xmlEscape(mvj.OriginName))
-		b.WriteString("</OriginName>")
-	}
+	writePlaceName(b, "OriginName", mvj.OriginName)
 	if mvj.DestinationRef != "" {
 		b.WriteString("<DestinationRef>")
 		b.WriteString(xmlEscape(mvj.DestinationRef))
 		b.WriteString("</DestinationRef>")
 	}
-	if mvj.DestinationName != "" {
-		b.WriteString("<DestinationName>")
-		b.WriteString(xmlEscape(mvj.DestinationName))
-		b.WriteString("</DestinationName>")
-	}
+	writePlaceName(b, "DestinationName", mvj.DestinationName)
 	// Monitored field
 	if mvj.Monitored != nil {
 		b.WriteString("<Monitored>")
@@ -136,6 +128,16 @@ func writeMVJXML(b *strings.Builder, mvj siri.MonitoredVehicleJourney) {
 			b.WriteString("false")
 		}
 		b.WriteString("</Monitored>")
+	}
+	// InCongestion comes right after Monitored in SIRI's journey progress order.
+	if mvj.InCongestion != nil {
+		b.WriteString("<InCongestion>")
+		if *mvj.InCongestion {
+			b.WriteString("true")
+		} else {
+			b.WriteString("false")
+		}
+		b.WriteString("</InCongestion>")
 	}
 	// DataSource (SIRI-VM spec: required)
 	if mvj.DataSource != "" {
@@ -175,16 +177,6 @@ func writeMVJXML(b *strings.Builder, mvj siri.MonitoredVehicleJourney) {
 		b.WriteString("<Delay>")
 		b.WriteString(xmlEscape(mvj.Delay))
 		b.WriteString("</Delay>")
-	}
-	// InCongestion
-	if mvj.InCongestion != nil {
-		b.WriteString("<InCongestion>")
-		if *mvj.InCongestion {
-			b.WriteString("true")
-		} else {
-			b.WriteString("false")
-		}
-		b.WriteString("</InCongestion>")
 	}
 	// VehicleStatus
 	if mvj.VehicleStatus != "" {
@@ -298,16 +290,8 @@ func writeEstimatedTimetableXML(b *strings.Builder, et siri.EstimatedTimetableDe
 				b.WriteString(xmlEscape(journey.VehicleMode))
 				b.WriteString("</VehicleMode>")
 			}
-			if journey.OriginName != "" {
-				b.WriteString("<OriginName>")
-				b.WriteString(xmlEscape(journey.OriginName))
-				b.WriteString("</OriginName>")
-			}
-			if journey.DestinationName != "" {
-				b.WriteString("<DestinationName>")
-				b.WriteString(xmlEscape(journey.DestinationName))
-				b.WriteString("</DestinationName>")
-			}
+			writePlaceName(b, "OriginName", journey.OriginName)
+			writePlaceName(b, "DestinationName", journey.DestinationName)
 			if journey.OperatorRef != "" {
 				b.WriteString("<OperatorRef>")
 				b.WriteString(xmlEscape(journey.OperatorRef))
@@ -468,11 +452,35 @@ func writeEstimatedTimetableXML(b *strings.Builder, et siri.EstimatedTimetableDe
 	b.WriteString("</EstimatedTimetableDelivery>")
 }
 
-func writeSituationExchangeXML(b *strings.Builder, sx siri.SituationExchangeDelivery) {
-	if len(sx.Situations) == 0 {
+// writePlaceName writes a SIRI place name without the characters SIRI forbids there, and nothing when none is left.
+func writePlaceName(b *strings.Builder, element, name string) {
+	name = utils.PlaceName(name)
+	if name == "" {
 		return
 	}
-	b.WriteString("<SituationExchangeDelivery>")
+	b.WriteString("<" + element + ">")
+	b.WriteString(xmlEscape(name))
+	b.WriteString("</" + element + ">")
+}
+
+func writeSituationExchangeXML(b *strings.Builder, sx siri.SituationExchangeDelivery) {
+	// SIRI needs a delivery with its ResponseTimestamp even when no situation is active.
+	b.WriteString("<SituationExchangeDelivery")
+	if sx.Version != "" {
+		b.WriteString(` version="`)
+		b.WriteString(xmlEscape(sx.Version))
+		b.WriteString(`"`)
+	}
+	b.WriteString(">")
+	if sx.ResponseTimestamp != "" {
+		b.WriteString("<ResponseTimestamp>")
+		b.WriteString(xmlEscape(sx.ResponseTimestamp))
+		b.WriteString("</ResponseTimestamp>")
+	}
+	if len(sx.Situations) == 0 {
+		b.WriteString("</SituationExchangeDelivery>")
+		return
+	}
 	b.WriteString("<Situations>")
 	for _, el := range sx.Situations {
 		b.WriteString("<PtSituationElement>")
@@ -553,6 +561,32 @@ func writeSituationExchangeXML(b *strings.Builder, sx siri.SituationExchangeDeli
 			b.WriteString(xmlEscape(desc.Text))
 			b.WriteString("</Description>")
 		}
+		// InfoLinks come before Affects in SIRI order
+		if len(el.InfoLinks) > 0 {
+			b.WriteString("<InfoLinks>")
+			for _, link := range el.InfoLinks {
+				b.WriteString("<InfoLink>")
+				if link.Uri != "" {
+					b.WriteString("<Uri>")
+					b.WriteString(xmlEscape(link.Uri))
+					b.WriteString("</Uri>")
+				}
+				// Label with language
+				for _, label := range link.Label {
+					b.WriteString("<Label")
+					if label.Lang != "" {
+						b.WriteString(" xml:lang=\"")
+						b.WriteString(xmlEscape(label.Lang))
+						b.WriteString("\"")
+					}
+					b.WriteString(">")
+					b.WriteString(xmlEscape(label.Text))
+					b.WriteString("</Label>")
+				}
+				b.WriteString("</InfoLink>")
+			}
+			b.WriteString("</InfoLinks>")
+		}
 		// Affects block
 		if el.Affects != nil {
 			b.WriteString("<Affects>")
@@ -613,32 +647,6 @@ func writeSituationExchangeXML(b *strings.Builder, sx siri.SituationExchangeDeli
 				b.WriteString("</StopPoints>")
 			}
 			b.WriteString("</Affects>")
-		}
-		// InfoLinks block
-		if len(el.InfoLinks) > 0 {
-			b.WriteString("<InfoLinks>")
-			for _, link := range el.InfoLinks {
-				b.WriteString("<InfoLink>")
-				if link.Uri != "" {
-					b.WriteString("<Uri>")
-					b.WriteString(xmlEscape(link.Uri))
-					b.WriteString("</Uri>")
-				}
-				// Label with language
-				for _, label := range link.Label {
-					b.WriteString("<Label")
-					if label.Lang != "" {
-						b.WriteString(" xml:lang=\"")
-						b.WriteString(xmlEscape(label.Lang))
-						b.WriteString("\"")
-					}
-					b.WriteString(">")
-					b.WriteString(xmlEscape(label.Text))
-					b.WriteString("</Label>")
-				}
-				b.WriteString("</InfoLink>")
-			}
-			b.WriteString("</InfoLinks>")
 		}
 		// Consequences block
 		if el.Consequences != nil && len(el.Consequences.Consequence) > 0 {

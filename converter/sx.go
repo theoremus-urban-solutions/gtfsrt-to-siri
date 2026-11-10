@@ -302,17 +302,23 @@ func mapGTFSRTCauseToReportType(gtfsrtCause string) string {
 	}
 }
 
-// Map GTFS-RT Effect → SIRI siri.Consequence Condition (minimal set)
+// effectToCondition maps a GTFS-RT Effect to a SIRI 2.1 ServiceCondition value; "" writes no Consequence.
 func effectToCondition(gtfsrtEffect string) string {
 	switch gtfsrtEffect {
 	case "NO_SERVICE":
-		return "NoService"
+		return "noService"
 	case "REDUCED_SERVICE":
-		return "ReducedService"
+		return "limitedOperation"
 	case "SIGNIFICANT_DELAYS":
-		return "SevereDelays"
+		return "majorDelays"
 	case "DETOUR":
-		return "Diversion"
+		return "diverted"
+	case "ADDITIONAL_SERVICE":
+		return "additionalService"
+	case "MODIFIED_SERVICE":
+		return "altered"
+	case "STOP_MOVED":
+		return "stopMoved"
 	default:
 		return ""
 	}

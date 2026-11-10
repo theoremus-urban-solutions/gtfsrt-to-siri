@@ -13,6 +13,7 @@ type GTFSIndex struct {
 	AgencyID        string                // Agency ID from config or agency.txt
 	AgencyTZ        string                // Agency timezone from agency.txt
 	AgencyName      string                // Agency name from agency.txt
+	OperatorID      string                // agency_id of the first agency.txt row, kept even when AgencyID comes from config
 	RouteShortNames map[string]string     // route_id -> short_name
 	RouteTypes      map[string]int        // route_id -> route_type (GTFS enum)
 	Routes          map[string]struct{}   // route existence set
@@ -60,6 +61,9 @@ func (g *GTFSIndex) GetRouteTypeWithExists(routeID string) (int, bool) {
 }
 
 func (g *GTFSIndex) GetAgencyName() string { return g.AgencyName }
+
+// GetOperatorID returns agency.txt's agency_id, empty when the file has none.
+func (g *GTFSIndex) GetOperatorID() string { return g.OperatorID }
 
 func (g *GTFSIndex) GetStopName(stopID string) string { return g.StopNames[stopID] }
 

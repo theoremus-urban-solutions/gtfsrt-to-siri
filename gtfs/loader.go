@@ -278,8 +278,11 @@ func (g *GTFSIndex) consumeCSV(f *zip.File, in interner) error {
 		if err != nil {
 			return err
 		}
-		if agID >= 0 && g.AgencyID == "" {
-			g.AgencyID = strings.Clone(row[agID])
+		if agID >= 0 {
+			g.OperatorID = strings.Clone(row[agID])
+			if g.AgencyID == "" {
+				g.AgencyID = g.OperatorID
+			}
 		}
 		if agTZ >= 0 {
 			g.AgencyTZ = strings.Clone(row[agTZ])

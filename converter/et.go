@@ -1,7 +1,6 @@
 package converter
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/theoremus-urban-solutions/gtfsrt-to-siri/utils"
@@ -115,11 +114,7 @@ func (c *Converter) buildEstimatedVehicleJourney(tripID string, now int64, agenc
 		}
 	}
 
-	// OperatorRef from agency_name
-	operatorRef := agencyID
-	if agencyName := c.gtfs.GetAgencyName(); agencyName != "" {
-		operatorRef = agencyID + ":Operator:" + agencyName
-	}
+	operatorRef := c.operatorRef(agencyID)
 
 	// Monitored: true if trip is currently ongoing (has both past and future stops)
 	monitored := len(recordedCalls) > 0 && len(estimatedCalls) > 0
@@ -159,7 +154,7 @@ func (c *Converter) buildCallSequence(tripID, gtfsLookupKey string, stopSequence
 	startDate := c.gtfsrt.GetStartDateForTrip(tripID)
 	// If no start_date from GTFS-RT, use today's date
 	if startDate == "" {
-		startDate = time.Unix(now, 0).Format("20060102")
+		startDate = time.Unix(now, 0).In(c.loc).Format("20060102")
 	}
 
 	for order, stopID := range stopSequence {
@@ -170,8 +165,8 @@ func (c *Converter) buildCallSequence(tripID, gtfsLookupKey string, stopSequence
 		// Get static GTFS times using gtfsLookupKey (the key that successfully found stopSequence)
 		staticArrivalStr := c.gtfs.GetArrivalTime(gtfsLookupKey, stopID)
 		staticDepartureStr := c.gtfs.GetDepartureTime(gtfsLookupKey, stopID)
-		staticArrival := gtfsTimeToUnixTimestamp(staticArrivalStr, startDate)
-		staticDeparture := gtfsTimeToUnixTimestamp(staticDepartureStr, startDate)
+		staticArrival := gtfsTimeToUnixTimestamp(staticArrivalStr, startDate, c.loc)
+		staticDeparture := gtfsTimeToUnixTimestamp(staticDepartureStr, startDate, c.loc)
 
 		// Log warnings for missing static times
 		if staticArrivalStr == "" && staticDepartureStr == "" {
@@ -193,7 +188,7 @@ func (c *Converter) buildCallSequence(tripID, gtfsLookupKey string, stopSequence
 		}
 
 		// Format StopPointRef as {codespace}:Quay:{stop_id}, then apply field mutators
-		stopPointRef := agencyID+":Quay:"+stopID
+		stopPointRef := agencyID + ":Quay:" + stopID
 
 		// Check if cancelled (schedule_relationship = 1 SKIPPED)
 		schedRel := c.gtfsrt.GetScheduleRelationshipForStop(tripID, stopID)
@@ -327,7 +322,7 @@ func (c *Converter) buildCallSequenceFromRTOnly(tripID string, now int64) ([]sir
 		}
 
 		// Format StopPointRef as {codespace}:Quay:{stop_id}, then apply field mutators
-		stopPointRef := agencyID+":Quay:"+stopID
+		stopPointRef := agencyID + ":Quay:" + stopID
 
 		// Check if cancelled (schedule_relationship = 1 SKIPPED)
 		schedRel := c.gtfsrt.GetScheduleRelationshipForStop(tripID, stopID)
@@ -394,64 +389,50 @@ func calculateStatus(expectedTime, aimedTime int64) string {
 	}
 }
 
-// gtfsTimeToUnixTimestamp converts a GTFS time string (HH:MM:SS) and start_date (YYYYMMDD) to Unix timestamp
-// GTFS times can be > 24h (e.g., 25:30:00 for 1:30 AM next day)
-func gtfsTimeToUnixTimestamp(gtfsTime, startDate string) int64 {
-	if gtfsTime == "" || startDate == "" {
-		return 0
-	}
-	// Parse start_date: YYYYMMDD
-	if len(startDate) != 8 {
-		return 0
-	}
-	year := startDate[0:4]
-	month := startDate[4:6]
-	day := startDate[6:8]
-
-	// Parse time: HH:MM:SS
-	var hour, min, sec int
-	if _, err := fmt.Sscanf(gtfsTime, "%d:%d:%d", &hour, &min, &sec); err != nil {
-		return 0
-	}
-
-	// Build date string and parse in local timezone (not UTC)
-	// GTFS static times are in local time, not UTC
-	dateStr := fmt.Sprintf("%s-%s-%sT00:00:00", year, month, day)
-	t, err := time.ParseInLocation("2006-01-02T15:04:05", dateStr, time.Local)
-	if err != nil {
-		return 0
-	}
-
-	// Add hours, minutes, seconds (handles > 24h times)
-	t = t.Add(time.Duration(hour)*time.Hour + time.Duration(min)*time.Minute + time.Duration(sec)*time.Second)
-	return t.Unix()
+// gtfsTimeToUnixTimestamp converts a GTFS time and start_date (YYYYMMDD) to Unix seconds in the agency timezone.
+func gtfsTimeToUnixTimestamp(gtfsTime, startDate string, loc *time.Location) int64 {
+	return utils.ParseGTFSTimeInLocation(gtfsTime, startDate, loc)
 }
 
-// mapGTFSRouteTypeToSIRIVehicleMode maps GTFS route_type to SIRI VehicleMode
-// See: https://gtfs.org/schedule/reference/#routestxt
+// mapGTFSRouteTypeToSIRIVehicleMode maps a GTFS route_type, basic or extended, to SIRI's VehicleMode list (air, bus, coach, ferry, metro, rail, tram, underground); "" leaves VehicleMode out.
 func mapGTFSRouteTypeToSIRIVehicleMode(routeType int) string {
 	switch routeType {
-	case 0:
+	case 0, 5: // tram, cable tram
 		return "tram"
 	case 1:
 		return "metro"
-	case 2:
+	case 2, 7, 12: // rail, funicular, monorail
 		return "rail"
-	case 3:
+	case 3, 11: // bus, trolleybus
 		return "bus"
 	case 4:
 		return "ferry"
-	case 5:
-		return "cableTram"
-	case 6:
-		return "aerialLift"
-	case 7:
-		return "funicular"
-	case 11:
-		return "trolleybus"
-	case 12:
-		return "monorail"
-	default:
-		return "bus" // Default fallback
+	case 6: // aerial lift has no SIRI mode
+		return ""
 	}
+	switch {
+	case routeType >= 100 && routeType < 200:
+		return "rail"
+	case routeType >= 200 && routeType < 300:
+		return "coach"
+	case routeType == 402:
+		return "underground"
+	case routeType == 405:
+		return "rail"
+	case routeType >= 400 && routeType < 500:
+		return "metro"
+	case routeType >= 700 && routeType < 900: // bus, trolleybus
+		return "bus"
+	case routeType >= 900 && routeType < 1000:
+		return "tram"
+	case routeType >= 1000 && routeType < 1100, routeType == 1200:
+		return "ferry"
+	case routeType >= 1100 && routeType < 1200:
+		return "air"
+	case routeType == 1400:
+		return "rail"
+	case routeType >= 1300 && routeType < 1800:
+		return ""
+	}
+	return "bus" // Default fallback
 }

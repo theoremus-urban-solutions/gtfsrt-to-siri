@@ -53,32 +53,28 @@ func Iso8601FromGTFSTimeAndDate(gtfsTime string, gtfsDate string) string {
 // Returns 0 on error
 // Uses local timezone to match ET behavior (GTFS static times are in local time)
 func ParseGTFSTimeToUnixSeconds(gtfsTime string, gtfsDate string) int64 {
+	return ParseGTFSTimeInLocation(gtfsTime, gtfsDate, time.Local)
+}
+
+// ParseGTFSTimeInLocation converts a GTFS time and service date to Unix seconds in loc, counting from noon minus 12h as GTFS defines, so hours past 24 and daylight-saving days come out right.
+func ParseGTFSTimeInLocation(gtfsTime string, gtfsDate string, loc *time.Location) int64 {
 	if gtfsTime == "" || len(gtfsDate) != 8 {
 		return 0
 	}
-
-	// Parse the base date (YYYYMMDD)
-	year := gtfsDate[:4]
-	month := gtfsDate[4:6]
-	day := gtfsDate[6:8]
-
-	// Parse the time (HH:MM:SS)
+	if loc == nil {
+		loc = time.Local
+	}
+	date, err := time.ParseInLocation("20060102", gtfsDate, loc)
+	if err != nil {
+		return 0
+	}
 	var h, m, s int
 	if _, err := fmt.Sscanf(gtfsTime, "%d:%d:%d", &h, &m, &s); err != nil {
 		return 0
 	}
-
-	// Build date string and parse in local timezone (not UTC)
-	// GTFS static times are in local time, matching ET's gtfsTimeToUnixTimestamp()
-	dateStr := fmt.Sprintf("%s-%s-%sT00:00:00", year, month, day)
-	t, err := time.ParseInLocation("2006-01-02T15:04:05", dateStr, time.Local)
-	if err != nil {
-		return 0
-	}
-
-	// Add time (handles hours >= 24)
-	t = t.Add(time.Duration(h)*time.Hour + time.Duration(m)*time.Minute + time.Duration(s)*time.Second)
-	return t.Unix()
+	noon := time.Date(date.Year(), date.Month(), date.Day(), 12, 0, 0, 0, loc)
+	base := noon.Add(-12 * time.Hour)
+	return base.Add(time.Duration(h)*time.Hour + time.Duration(m)*time.Minute + time.Duration(s)*time.Second).Unix()
 }
 
 // FormatDelayAsISO8601Duration converts delay in seconds to ISO 8601 duration format

@@ -2,6 +2,30 @@
 
 Every release of gtfsrt-to-siri, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.2.0] - 2026-11-10
+
+This release makes the output match the SIRI 2.1 schema and fixes scheduled times for agencies outside the server's timezone. Vehicle Monitoring, Estimated Timetable and Situation Exchange built from the Sofia test data now pass `xmllint` against the official SIRI 2.1 XSD. With 1.1.0, all three failed, with 410, 867 and 60 errors.
+
+### Fixed
+
+- **Scheduled times use the agency timezone.** GTFS times were read in the server's own timezone, so a server running in UTC put every Sofia `AimedArrivalTime` two hours late and marked almost every call `early`. Times are now read in `agency_timezone` from `agency.txt`, counted from noon minus 12 hours as GTFS defines, so days when the clocks change come out right too. The same fix applies to the `Delay` in Vehicle Monitoring. The timezone data is built into the library, so this also works in images without `/usr/share/zoneinfo`.
+- **`OperatorRef` is a valid code.** It was `{codespace}:Operator:{agency_name}`, and a name with spaces breaks the schema. It is now `{codespace}:Operator:{agency_id}`, for example `BG:Operator:A`.
+- **`VehicleMode` only uses SIRI's values.** `trolleybus` becomes `bus`, cable tram becomes `tram`, and funicular and monorail become `rail`. Extended GTFS route types are mapped as well. An aerial lift has no SIRI mode, so its `VehicleMode` is left out.
+- **Place names drop the characters SIRI forbids there.** `OriginName` and `DestinationName` may not hold `, [ ] { } ? $ % ^ = @ # ; :`. Each one becomes a space, so `Ж.К. ЛЮЛИН-1,2` is written `Ж.К. ЛЮЛИН-1 2`.
+- **Every vehicle has a `DataFrameRef`.** A trip without `start_date` used to get none, which SIRI does not allow. It now gets the feed's service date in the agency timezone.
+- **Elements are in SIRI's order.** In Vehicle Monitoring, `InCongestion` now comes right after `Monitored`. In Situation Exchange, `InfoLinks` now comes before `Affects`.
+- **Situation Exchange conditions use SIRI's values.** `Diversion`, `NoService`, `ReducedService` and `SevereDelays` are not SIRI values. They are now `diverted`, `noService`, `limitedOperation` and `majorDelays`. `ADDITIONAL_SERVICE`, `MODIFIED_SERVICE` and `STOP_MOVED` now map to `additionalService`, `altered` and `stopMoved`.
+- **An empty Situation Exchange is still a delivery.** With no active alert the response used to have no `SituationExchangeDelivery` at all. It now has one with its `ResponseTimestamp`.
+
+### Added
+
+- `utils.ParseGTFSTimeInLocation`, `utils.NMToken`, `utils.PlaceName` and `GTFSIndex.GetOperatorID`.
+
+### Upgrading
+
+- An Estimated Timetable with no journeys still cannot pass the schema. SIRI 2.1 needs at least one journey in each delivery.
+- An index cached by an older version has no `OperatorID`. Its `OperatorRef` falls back to the agency name with spaces turned into `_`. Rebuild the cache to get `agency_id`.
+
 ## [1.1.0] - 2026-11-03
 
 This release is about memory. The realtime-transit service kept running out of it on staging, and a large share went through this library. After moving to 1.1.0, the service's peak memory on staging fell from 677 MB to 285 MB.
@@ -107,6 +131,7 @@ This release is about memory. The realtime-transit service kept running out of i
 - First release. Converts raw GTFS static zips and GTFS-RT protobuf bytes into SIRI Vehicle Monitoring, Estimated Timetable and Situation Exchange, in XML or JSON, following the Nordic SIRI profile.
 - Packages for GTFS loading, GTFS-RT parsing, conversion, formatting and vehicle tracking, a command-line tool, and a test suite on Sofia data.
 
+[1.2.0]: https://github.com/theoremus-urban-solutions/gtfsrt-to-siri/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/theoremus-urban-solutions/gtfsrt-to-siri/compare/v1.0.7...v1.1.0
 [1.0.7]: https://github.com/theoremus-urban-solutions/gtfsrt-to-siri/compare/v1.0.6...v1.0.7
 [1.0.6]: https://github.com/theoremus-urban-solutions/gtfsrt-to-siri/compare/v1.0.5...v1.0.6

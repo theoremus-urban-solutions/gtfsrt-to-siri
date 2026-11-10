@@ -35,6 +35,9 @@ func WrapEstimatedTimetableResponse(et siri.EstimatedTimetableDelivery, codespac
 // WrapSituationExchangeResponse wraps a SX delivery in a complete SIRI response
 func WrapSituationExchangeResponse(sx siri.SituationExchangeDelivery, timestamp int64, codespace string) *utils.SiriResponse {
 	sd := BuildServiceDelivery(timestamp, codespace)
+	if sx.ResponseTimestamp == "" {
+		sx.ResponseTimestamp = sd.ResponseTimestamp
+	}
 	sd.SituationExchangeDelivery = []siri.SituationExchangeDelivery{sx}
 
 	return &sd
